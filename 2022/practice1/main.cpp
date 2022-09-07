@@ -28,21 +28,24 @@ void glew_fail(std::string_view message, GLenum error)
 
 const char vertex_source[] = R"(#version 330 core
 const vec2 VERTICES[3] = vec2[3](
-vec2(0.0, 0.0),
-vec2(1.0, 0.0),
-vec2(0.0, 1.0)
+    vec2(0.0, 0.0),
+    vec2(1.0, 0.0),
+    vec2(0.0, 1.0)
 );
+flat out vec3 color;
 void main()
 {
-gl_Position = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
+    gl_Position = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
+    color = vec3(0.5, gl_Position[0], gl_VertexID * 0.3);
 }
 )";
 const char fragment_source[] = R"(#version 330 core
 layout (location = 0) out vec4 out_color;
+flat in vec3 color;
 void main()
 {
-// vec4(R, G, B, A)
-out_color = vec4(0.0, 1.0, 0.0, 1.0);
+    // vec4(R, G, B, A)
+    out_color = vec4(color, 1.0);
 }
 )";
 
@@ -51,6 +54,7 @@ GLuint create_shader(GLenum shader_type, const char* shader_source) {
     glShaderSource(shader_id, 1, &shader_source, NULL);
     glCompileShader(shader_id);
     GLint compiled;
+    glProvokingVertex(GL_LAST_VERTEX_CONVENTION);
     glGetShaderiv(shader_id, GL_COMPILE_STATUS, &compiled);
     if (not compiled) {
         GLint log_length;
