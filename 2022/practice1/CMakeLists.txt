@@ -4,7 +4,7 @@ project(practice1)
 cmake_policy(SET CMP0072 NEW)
 cmake_policy(SET CMP0074 NEW)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules")
 

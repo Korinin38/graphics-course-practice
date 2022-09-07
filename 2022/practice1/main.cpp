@@ -13,7 +13,7 @@
 
 std::string to_string(std::string_view str)
 {
-	return std::string(str.begin(), str.end());
+	return std::string{str.begin(), str.end()};
 }
 
 void sdl2_fail(std::string_view message)
@@ -51,7 +51,7 @@ void main()
 
 GLuint create_shader(GLenum shader_type, const char* shader_source) {
     GLuint shader_id = glCreateShader(shader_type);
-    glShaderSource(shader_id, 1, &shader_source, NULL);
+    glShaderSource(shader_id, 1, &shader_source, nullptr);
     glCompileShader(shader_id);
     GLint compiled;
     glProvokingVertex(GL_LAST_VERTEX_CONVENTION);
@@ -71,7 +71,6 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader) {
     glAttachShader(program_id, vertex_shader);
     glAttachShader(program_id, fragment_shader);
     glLinkProgram(program_id);
-    return program_id;
     GLint linked;
     glGetProgramiv(program_id, GL_LINK_STATUS, &linked);
     if (not linked) {
@@ -81,6 +80,7 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader) {
         glGetProgramInfoLog(program_id, log_length, &log_length, info_log.data());
         throw std::runtime_error(info_log);
     }
+    return program_id;
 }
 
 int main() try
