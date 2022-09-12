@@ -32,20 +32,22 @@ const vec2 VERTICES[3] = vec2[3](
     vec2(1.0, 0.0),
     vec2(0.0, 1.0)
 );
-flat out vec3 color;
+out vec2 pos;
 void main()
 {
     gl_Position = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
-    color = vec3(0.5, gl_Position[0], gl_VertexID * 0.3);
+    pos = vec2(gl_Position[0], gl_Position[1]);
 }
 )";
 const char fragment_source[] = R"(#version 330 core
 layout (location = 0) out vec4 out_color;
-flat in vec3 color;
+in vec2 pos;
+const float scale = 10;
 void main()
 {
     // vec4(R, G, B, A)
-    out_color = vec4(color, 1.0);
+    int col = int(floor(pos[0] * scale) + floor(pos[1] * scale)) % 2;
+    out_color = vec4(col, col, col, 1.0);
 }
 )";
 
