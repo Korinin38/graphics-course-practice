@@ -47,7 +47,7 @@ void main()
 {
     // vec4(R, G, B, A)
     int col = int(floor(pos[0] * scale) + floor(pos[1] * scale)) % 2;
-    out_color = vec4(col, col, col, 1.0);
+    out_color = vec4(col, 0, col, 1.0);
 }
 )";
 

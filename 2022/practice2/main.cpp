@@ -42,12 +42,13 @@ const vec3 COLORS[3] = vec3[3](
     vec3(0.0, 0.0, 1.0)
 );
 
+uniform float scale;
 out vec3 color;
 
 void main()
 {
     vec2 position = VERTICES[gl_VertexID];
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = vec4(position * scale, 0.0, 1.0);
     color = COLORS[gl_VertexID];
 }
 )";
@@ -142,6 +143,10 @@ int main() try
     GLuint fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
 
     GLuint program = create_program(vertex_shader, fragment_shader);
+
+    glUseProgram(program);
+    GLint scale = glGetUniformLocation(program, "scale");
+    glUniform1f(scale, 0.8);
 
     GLuint vao;
     glGenVertexArrays(1, &vao);
