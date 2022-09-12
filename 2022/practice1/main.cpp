@@ -18,12 +18,12 @@ std::string to_string(std::string_view str)
 
 void sdl2_fail(std::string_view message)
 {
-	throw std::runtime_error(to_string(message) + SDL_GetError());
+    throw std::runtime_error(to_string(message) + SDL_GetError());
 }
 
 void glew_fail(std::string_view message, GLenum error)
 {
-	throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
+    throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
 const char vertex_source[] = R"(#version 330 core
@@ -87,32 +87,32 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader) {
 
 int main() try
 {
-	if (SDL_Init(SDL_INIT_VIDEO) != 0)
-		sdl2_fail("SDL_Init: ");
+    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+        sdl2_fail("SDL_Init: ");
 
-	SDL_Window * window = SDL_CreateWindow("Graphics course practice 1",
-		SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED,
-		800, 600,
-		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+    SDL_Window * window = SDL_CreateWindow("Graphics course practice 1",
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
+        800, 600,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
 
-	if (!window)
-		sdl2_fail("SDL_CreateWindow: ");
+    if (!window)
+        sdl2_fail("SDL_CreateWindow: ");
 
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-	if (!gl_context)
-		sdl2_fail("SDL_GL_CreateContext: ");
+    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    if (!gl_context)
+        sdl2_fail("SDL_GL_CreateContext: ");
 
-	if (auto result = glewInit(); result != GLEW_NO_ERROR)
-		glew_fail("glewInit: ", result);
+    if (auto result = glewInit(); result != GLEW_NO_ERROR)
+        glew_fail("glewInit: ", result);
 
-	if (!GLEW_VERSION_3_3)
-		throw std::runtime_error("OpenGL 3.3 is not supported");
+    if (!GLEW_VERSION_3_3)
+        throw std::runtime_error("OpenGL 3.3 is not supported");
 
     GLuint fr_shader = create_shader(GL_FRAGMENT_SHADER, fragment_source);
     GLuint ver_shader = create_shader(GL_VERTEX_SHADER, vertex_source);
@@ -121,23 +121,22 @@ int main() try
     GLuint vertex_array;
     glGenVertexArrays(1, &vertex_array);
 
-
     glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
-	bool running = true;
-	while (running)
-	{
-		for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
-		{
-		case SDL_QUIT:
-			running = false;
-			break;
-		}
+    bool running = true;
+    while (running)
+    {
+        for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
+        {
+        case SDL_QUIT:
+            running = false;
+            break;
+        }
 
-		if (!running)
-			break;
+        if (!running)
+            break;
 
-		glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(program);
         glBindVertexArray(vertex_array);
@@ -146,8 +145,8 @@ int main() try
 		SDL_GL_SwapWindow(window);
 	}
 
-	SDL_GL_DeleteContext(gl_context);
-	SDL_DestroyWindow(window);
+    SDL_GL_DeleteContext(gl_context);
+    SDL_DestroyWindow(window);
 }
 catch (std::exception const & e)
 {
