@@ -186,7 +186,7 @@ int main() try
 
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
-        time += dt;
+        time += dt*2;
         last_frame_start = now;
 
         glClear(GL_COLOR_BUFFER_BIT);
@@ -195,10 +195,13 @@ int main() try
         glBindVertexArray(vao);
 
 //        float scale = abs(sin(time) * 0.5) + 0.5;
-        float scale = 0.7;
+        float scale = 0.3;
+        float deg60 = (float)std::numbers::pi;
+        float x = -sin(time) * (1 - scale);
+        float y = sin(time + std::numbers::pi/2) * (1 - scale);
         float transform[16] = {
-                scale * cos(time), scale * -sin(time), 0, 0,
-                scale * sin(time), scale * cos(time), 0, 0,
+                scale * cos(deg60 + time), scale * -sin(deg60 + time), 0, x,
+                scale * sin(deg60 + time), scale * cos(deg60 + time), 0, y,
                 0, 0, scale, 0,
                 0, 0, 0, 1,
         };
