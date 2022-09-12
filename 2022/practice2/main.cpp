@@ -42,13 +42,25 @@ const vec3 COLORS[3] = vec3[3](
     vec3(0.0, 0.0, 1.0)
 );
 
+uniform float angle;
 uniform float scale;
 out vec3 color;
 
 void main()
 {
     vec2 position = VERTICES[gl_VertexID];
-    gl_Position = vec4(position * scale, 0.0, 1.0);
+    position *= scale;
+
+    // cos -sin
+    // sin cos
+    mat2 rotateMatrix;
+    rotateMatrix[0][0] = cos(angle);
+    rotateMatrix[1][0] = -sin(angle);
+    rotateMatrix[0][1] = sin(angle);
+    rotateMatrix[1][1] = cos(angle);
+
+    position = rotateMatrix * position;
+    gl_Position = vec4(position, 0.0, 1.0);
     color = COLORS[gl_VertexID];
 }
 )";
@@ -146,6 +158,8 @@ int main() try
 
     glUseProgram(program);
     GLint scale = glGetUniformLocation(program, "scale");
+    GLint angle = glGetUniformLocation(program, "angle");
+    float time = 0.f;
     glUniform1f(scale, 0.8);
 
     GLuint vao;
@@ -177,12 +191,16 @@ int main() try
 
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+        time += dt;
         last_frame_start = now;
 
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(program);
         glBindVertexArray(vao);
+
+        glUniform1f(angle, time);
+
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         SDL_GL_SwapWindow(window);
