@@ -138,6 +138,7 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_SetSwapInterval(0);
     if (!gl_context)
         sdl2_fail("SDL_GL_CreateContext: ");
 
@@ -188,6 +189,8 @@ int main() try
 
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+        dt = 0.016f;
+        std::cout << dt << std::endl;
         time += dt*2;
         last_frame_start = now;
 
