@@ -42,25 +42,22 @@ const vec3 COLORS[3] = vec3[3](
     vec3(0.0, 0.0, 1.0)
 );
 
-uniform float angle;
-uniform float scale;
+uniform mat4 transform;
 out vec3 color;
 
 void main()
 {
     vec2 position = VERTICES[gl_VertexID];
-    position *= scale;
 
-    // cos -sin
-    // sin cos
-    mat2 rotateMatrix;
-    rotateMatrix[0][0] = cos(angle);
-    rotateMatrix[1][0] = -sin(angle);
-    rotateMatrix[0][1] = sin(angle);
-    rotateMatrix[1][1] = cos(angle);
+//    // cos -sin
+//    // sin cos
+//    mat2 rotateMatrix;
+//    rotateMatrix[0][0] = cos(angle);
+//    rotateMatrix[1][0] = -sin(angle);
+//    rotateMatrix[0][1] = sin(angle);
+//    rotateMatrix[1][1] = cos(angle);
 
-    position = rotateMatrix * position;
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = transform * vec4(position, 0.0, 1.0);
     color = COLORS[gl_VertexID];
 }
 )";
@@ -157,10 +154,8 @@ int main() try
     GLuint program = create_program(vertex_shader, fragment_shader);
 
     glUseProgram(program);
-    GLint scale = glGetUniformLocation(program, "scale");
-    GLint angle = glGetUniformLocation(program, "angle");
+    GLint transform_uniform = glGetUniformLocation(program, "transform");
     float time = 0.f;
-    glUniform1f(scale, 0.8);
 
     GLuint vao;
     glGenVertexArrays(1, &vao);
@@ -199,7 +194,15 @@ int main() try
         glUseProgram(program);
         glBindVertexArray(vao);
 
-        glUniform1f(angle, time);
+//        float scale = abs(sin(time) * 0.5) + 0.5;
+        float scale = 0.7;
+        float transform[16] = {
+                scale * cos(time), scale * -sin(time), 0, 0,
+                scale * sin(time), scale * cos(time), 0, 0,
+                0, 0, scale, 0,
+                0, 0, 0, 1,
+        };
+        glUniformMatrix4fv(transform_uniform, 1, GL_TRUE, transform);
 
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
