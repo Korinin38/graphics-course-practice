@@ -42,6 +42,7 @@ const vec3 COLORS[3] = vec3[3](
     vec3(0.0, 0.0, 1.0)
 );
 
+uniform mat4 view;
 uniform mat4 transform;
 out vec3 color;
 
@@ -57,7 +58,7 @@ void main()
 //    rotateMatrix[0][1] = sin(angle);
 //    rotateMatrix[1][1] = cos(angle);
 
-    gl_Position = transform * vec4(position, 0.0, 1.0);
+    gl_Position = view * transform * vec4(position, 0.0, 1.0);
     color = COLORS[gl_VertexID];
 }
 )";
@@ -155,6 +156,7 @@ int main() try
 
     glUseProgram(program);
     GLint transform_uniform = glGetUniformLocation(program, "transform");
+    GLint view_uniform = glGetUniformLocation(program, "view");
     float time = 0.f;
 
     GLuint vao;
@@ -195,6 +197,7 @@ int main() try
         glBindVertexArray(vao);
 
 //        float scale = abs(sin(time) * 0.5) + 0.5;
+        float aspect_ratio = width * 1.f / height;
         float scale = 0.3;
         float deg60 = (float)std::numbers::pi;
         float x = -sin(time) * (1 - scale);
@@ -205,7 +208,14 @@ int main() try
                 0, 0, scale, 0,
                 0, 0, 0, 1,
         };
+        float view[16] = {
+                1/aspect_ratio, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1,
+        };
         glUniformMatrix4fv(transform_uniform, 1, GL_TRUE, transform);
+        glUniformMatrix4fv(view_uniform, 1, GL_TRUE, view);
 
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
