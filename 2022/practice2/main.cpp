@@ -30,16 +30,26 @@ void glew_fail(std::string_view message, GLenum error)
 const char vertex_shader_source[] =
 R"(#version 330 core
 
-const vec2 VERTICES[3] = vec2[3](
+const vec2 VERTICES[8] = vec2[8](
+    vec2(0.0, 0.0),
     vec2(0.0, 1.0),
+    vec2(-sqrt(0.75), 0.5),
     vec2(-sqrt(0.75), -0.5),
-    vec2( sqrt(0.75), -0.5)
+    vec2(0.0, -1.0),
+    vec2(sqrt(0.75), -0.5),
+    vec2(sqrt(0.75), 0.5),
+    vec2(0.0, 1.0)
 );
 
-const vec3 COLORS[3] = vec3[3](
+const vec3 COLORS[8] = vec3[8](
+    vec3(0.5, 0.5, 0.5),
     vec3(1.0, 0.0, 0.0),
     vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
+    vec3(0.0, 0.0, 1.0),
+    vec3(0.0, 1.0, 1.0),
+    vec3(1.0, 0.0, 1.0),
+    vec3(1.0, 1.0, 0.0),
+    vec3(1.0, 0.0, 0.0)
 );
 
 uniform mat4 view;
@@ -189,8 +199,9 @@ int main() try
 
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
-        dt = 0.016f;
-        std::cout << dt << std::endl;
+//        dt = 0.016f;
+//        std::cout << dt << std::endl;
+
         time += dt*2;
         last_frame_start = now;
 
@@ -202,7 +213,7 @@ int main() try
 //        float scale = abs(sin(time) * 0.5) + 0.5;
         float aspect_ratio = width * 1.f / height;
         float scale = 0.3;
-        float deg60 = (float)std::numbers::pi;
+        float deg60 = (float)std::numbers::pi*9/5;
         float x = -sin(time) * (1 - scale);
         float y = sin(time + std::numbers::pi/2) * (1 - scale);
         float transform[16] = {
@@ -220,7 +231,7 @@ int main() try
         glUniformMatrix4fv(transform_uniform, 1, GL_TRUE, transform);
         glUniformMatrix4fv(view_uniform, 1, GL_TRUE, view);
 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 8);
 
         SDL_GL_SwapWindow(window);
     }
