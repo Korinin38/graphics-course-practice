@@ -107,6 +107,12 @@ struct vertex
 {
     vec2 position;
     std::uint8_t color[4];
+
+    void set_color(std::uint8_t const other[]) {
+        for (int i = 0; i < 4; ++i) {
+            color[i] = other[i];
+        }
+    }
 };
 
 vec2 bezier(std::vector<vertex> const & vertices, float t)
@@ -172,24 +178,19 @@ int main() try
     const std::uint8_t GREEN[4] = {0, 255, 0, 255};
     const std::uint8_t BLUE[4] = {0, 0, 255, 255};
 
-    vertex v[3];
+    std::vector<vertex> v(3);
     // wow this is bad
-    v[0].position = {1, 0};
-    for (int i = 0; i < 4; ++i) {
-        v[0].color[i] = RED[i];
-    }
-    v[1].position = {0, 0};
-    for (int i = 0; i < 4; ++i) {
-        v[1].color[i] = GREEN[i];
-    }
-    v[2].position = {0, 1};
-    for (int i = 0; i < 4; ++i) {
-        v[2].color[i] = BLUE[i];
-    }
+    v[0].position = {width * 1.f, height / 2.f};
+    v[0].set_color(RED);
+    v[1].position = {width / 2.f, height / 2.f};
+    v[1].set_color(GREEN);
+    v[2].position = {width / 2.f, height * 1.f};
+    v[2].set_color(BLUE);
+
     GLuint vbo;
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(vertex), v, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(vertex), v.data(), GL_STATIC_DRAW);
 
     float test;
     glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vertex) * 2 + sizeof(float), sizeof(float), &test);
@@ -200,10 +201,10 @@ int main() try
     glBindVertexArray(vao);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
 
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
 
     GLuint view_location = glGetUniformLocation(program, "view");
 
@@ -233,10 +234,36 @@ int main() try
                     {
                         int mouse_x = event.button.x;
                         int mouse_y = event.button.y;
+
+                        std::cout << mouse_x << " " << mouse_y << std::endl;
+                        std::cout << (v.size() + 1) % 3 << std::endl;
+                        vertex nw = {1.f * mouse_x, 1.f * (height - mouse_y)};
+                        switch ((v.size() + 1) % 3) {
+                            case 0:
+                                nw.set_color(RED);
+                                break;
+                            case 1:
+                                nw.set_color(GREEN);
+                                break;
+                            case 2:
+                                nw.set_color(BLUE);
+                                break;
+                        }
+                        v.push_back(nw);
+
+                        std::cout << v.size() << std::endl;
+                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_STATIC_DRAW);
+//                        glEnableVertexAttribArray(0);
+//                        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+//
+//                        glEnableVertexAttribArray(1);
+//                        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
                     }
                     else if (event.button.button == SDL_BUTTON_RIGHT)
                     {
-
+                        if (v.size() > 0)
+                            v.pop_back();
+                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_STATIC_DRAW);
                     }
                     break;
                 case SDL_KEYDOWN:
@@ -263,14 +290,17 @@ int main() try
 
         float view[16] =
                 {
-                        1.f, 0.f, 0.f, 0.f,
-                        0.f, 1.f, 0.f, 0.f,
+                        2.f / width, 0.f, 0.f, -1.f,
+                        0.f, 2.f / height, 0.f, -1.f,
                         0.f, 0.f, 1.f, 0.f,
                         0.f, 0.f, 0.f, 1.f,
                 };
 
         glUseProgram(program);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawArrays(GL_LINE_STRIP, 0, v.size());
+        glDrawArrays(GL_POINTS, 0, v.size());
+        glPointSize(10);
+        glLineWidth(5.f);
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
 
         SDL_GL_SwapWindow(window);
