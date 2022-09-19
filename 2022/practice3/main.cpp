@@ -29,7 +29,7 @@ void glew_fail(std::string_view message, GLenum error)
 }
 
 const char vertex_shader_source[] =
-R"(#version 330 core
+        R"(#version 330 core
 
 uniform mat4 view;
 
@@ -46,7 +46,7 @@ void main()
 )";
 
 const char fragment_shader_source[] =
-R"(#version 330 core
+        R"(#version 330 core
 
 in vec4 color;
 
@@ -139,10 +139,10 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
     SDL_Window * window = SDL_CreateWindow("Graphics course practice 3",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        800, 600,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+                                           SDL_WINDOWPOS_CENTERED,
+                                           SDL_WINDOWPOS_CENTERED,
+                                           800, 600,
+                                           SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
 
     if (!window)
         sdl2_fail("SDL_CreateWindow: ");
@@ -168,6 +168,43 @@ int main() try
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
 
+    const std::uint8_t RED[4] = {255, 0, 0, 255};
+    const std::uint8_t GREEN[4] = {0, 255, 0, 255};
+    const std::uint8_t BLUE[4] = {0, 0, 255, 255};
+
+    vertex v[3];
+    // wow this is bad
+    v[0].position = {1, 0};
+    for (int i = 0; i < 4; ++i) {
+        v[0].color[i] = RED[i];
+    }
+    v[1].position = {0, 0};
+    for (int i = 0; i < 4; ++i) {
+        v[1].color[i] = GREEN[i];
+    }
+    v[2].position = {0, 1};
+    for (int i = 0; i < 4; ++i) {
+        v[2].color[i] = BLUE[i];
+    }
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(vertex), v, GL_STATIC_DRAW);
+
+    float test;
+    glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vertex) * 2 + sizeof(float), sizeof(float), &test);
+    std::cout << test << std::endl;
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
+
     GLuint view_location = glGetUniformLocation(program, "view");
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
@@ -178,41 +215,41 @@ int main() try
     while (running)
     {
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
-        {
-        case SDL_QUIT:
-            running = false;
-            break;
-        case SDL_WINDOWEVENT: switch (event.window.event)
             {
-            case SDL_WINDOWEVENT_RESIZED:
-                width = event.window.data1;
-                height = event.window.data2;
-                glViewport(0, 0, width, height);
-                break;
-            }
-            break;
-        case SDL_MOUSEBUTTONDOWN:
-            if (event.button.button == SDL_BUTTON_LEFT)
-            {
-                int mouse_x = event.button.x;
-                int mouse_y = event.button.y;
-            }
-            else if (event.button.button == SDL_BUTTON_RIGHT)
-            {
+                case SDL_QUIT:
+                    running = false;
+                    break;
+                case SDL_WINDOWEVENT: switch (event.window.event)
+                    {
+                        case SDL_WINDOWEVENT_RESIZED:
+                            width = event.window.data1;
+                            height = event.window.data2;
+                            glViewport(0, 0, width, height);
+                            break;
+                    }
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    if (event.button.button == SDL_BUTTON_LEFT)
+                    {
+                        int mouse_x = event.button.x;
+                        int mouse_y = event.button.y;
+                    }
+                    else if (event.button.button == SDL_BUTTON_RIGHT)
+                    {
 
-            }
-            break;
-        case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_LEFT)
-            {
+                    }
+                    break;
+                case SDL_KEYDOWN:
+                    if (event.key.keysym.sym == SDLK_LEFT)
+                    {
 
-            }
-            else if (event.key.keysym.sym == SDLK_RIGHT)
-            {
+                    }
+                    else if (event.key.keysym.sym == SDLK_RIGHT)
+                    {
 
+                    }
+                    break;
             }
-            break;
-        }
 
         if (!running)
             break;
@@ -225,14 +262,15 @@ int main() try
         glClear(GL_COLOR_BUFFER_BIT);
 
         float view[16] =
-        {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-            0.f, 0.f, 0.f, 1.f,
-        };
+                {
+                        1.f, 0.f, 0.f, 0.f,
+                        0.f, 1.f, 0.f, 0.f,
+                        0.f, 0.f, 1.f, 0.f,
+                        0.f, 0.f, 0.f, 1.f,
+                };
 
         glUseProgram(program);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
 
         SDL_GL_SwapWindow(window);
