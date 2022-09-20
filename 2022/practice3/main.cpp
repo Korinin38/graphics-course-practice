@@ -261,14 +261,14 @@ int main() try
     GLuint bezier_vbo;
     glGenBuffers(1, &bezier_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
-    glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
 
     std::vector<float> dist(bez.size());
     count_dist(dist, bez);
     GLuint dist_vbo;
     glGenBuffers(1, &dist_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
-    glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
 
     glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
     glEnableVertexAttribArray(0);
@@ -332,11 +332,11 @@ int main() try
                         }
 
                         glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
-                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_STATIC_DRAW);
+                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_DYNAMIC_DRAW);
                         glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
-                        glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_STATIC_DRAW);
+                        glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
                         glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
-                        glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_STATIC_DRAW);
+                        glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
 //                        glEnableVertexAttribArray(0);
 //                        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
 //
@@ -353,11 +353,11 @@ int main() try
                         }
 
                         glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
-                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_STATIC_DRAW);
+                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_DYNAMIC_DRAW);
                         glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
-                        glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_STATIC_DRAW);
+                        glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
                         glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
-                        glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_STATIC_DRAW);
+                        glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
                     }
                     break;
                 case SDL_KEYDOWN:
@@ -369,9 +369,9 @@ int main() try
                                 count_bez(bez, v, quality);
                                 count_dist(dist, bez);
                                 glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
-                                glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_STATIC_DRAW);
+                                glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
                                 glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
-                                glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_STATIC_DRAW);
+                                glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
                             }
                         }
                     }
@@ -382,9 +382,9 @@ int main() try
                             count_bez(bez, v, quality);
                             count_dist(dist, bez);
                             glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
-                            glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_STATIC_DRAW);
+                            glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
                             glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
-                            glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_STATIC_DRAW);
+                            glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
                         }
                     }
                     else if (event.key.keysym.sym == SDLK_b) {
