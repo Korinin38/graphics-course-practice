@@ -150,21 +150,8 @@ void count_bez(std::vector<vertex> &bez, const std::vector<vertex> &vertices, in
 
     for (int i = 0; i < bez.size(); ++i) {
         float t = i * 1.f / (bez.size() - 1);
-//        std::cout << t << std::endl;
         bez[i].position = bezier(vertices, t);
-//        switch (i % 3) {
-//            case 0:
-//                bez[i].set_color(RED);
-//                break;
-//            case 1:
-//                bez[i].set_color(GREEN);
-//                break;
-//            case 2:
-//                bez[i].set_color(BLUE);
-//                break;
-//        }
-                bez[i].set_color(BLACK);
-//        std::cout << bez[i].position.x << " " << bez[i].position.y << std::endl;
+        bez[i].set_color(BLACK);
     }
 }
 
@@ -337,11 +324,6 @@ int main() try
                         glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
                         glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
                         glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
-//                        glEnableVertexAttribArray(0);
-//                        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
-//
-//                        glEnableVertexAttribArray(1);
-//                        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
                     }
                     else if (event.button.button == SDL_BUTTON_RIGHT)
                     {
