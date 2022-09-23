@@ -212,9 +212,9 @@ int main() try
     int quality = 4;
 
     vertex _v[3] = {
-        {{width * 1.f, height / 2.f}, {255, 0, 0, 255}},
-        {{width / 2.f, height / 2.f}, {0, 255, 0, 255}},
-        {{width / 2.f, height * 1.f},  {0, 0, 255, 255}},
+            {{width * 1.f, height / 2.f}, {255, 0, 0, 255}},
+            {{width / 2.f, height / 2.f}, {0, 255, 0, 255}},
+            {{width / 2.f, height * 1.f},  {0, 0, 255, 255}},
     };
     std::vector<vertex> v (_v, _v + 3);
     bool draw_points = true;
