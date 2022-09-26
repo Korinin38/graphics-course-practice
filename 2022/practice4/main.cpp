@@ -145,6 +145,7 @@ int main() try
     auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source);
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
+    glEnable(GL_DEPTH_TEST);
 
     GLuint view_location = glGetUniformLocation(program, "view");
     GLuint transform_location = glGetUniformLocation(program, "transform");
@@ -175,11 +176,24 @@ int main() try
 
     float time = 0.f;
 
+    float near = 0.0001f;
+    float far = 1000.f;
+    float fov = std::numbers::pi / 4;
+    float aspect_ratio = 1.0f * width / height;
+    float right = near * tan(fov);
+    float top = right / aspect_ratio;
+
+    float bunny_x = 0;
+    float bunny_y = 0;
+    float speed = .6f;
+
     std::map<SDL_Keycode, bool> button_down;
 
     bool running = true;
     while (running)
     {
+        auto now = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
         {
         case SDL_QUIT:
@@ -202,29 +216,44 @@ int main() try
             break;
         }
 
+        if (button_down[SDLK_LEFT]) {
+            bunny_x -= speed * dt;
+        }
+        if (button_down[SDLK_RIGHT]) {
+            bunny_x += speed * dt;
+        }
+        if (button_down[SDLK_DOWN]) {
+            bunny_y -= speed * dt;
+        }
+        if (button_down[SDLK_UP]) {
+            bunny_y += speed * dt;
+        }
+
         if (!running)
             break;
 
-        auto now = std::chrono::high_resolution_clock::now();
-        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
         last_frame_start = now;
         time += dt;
 
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+        float angle = time ;
+        float scale = 0.6f;
+
 
         float view[16] =
         {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-            0.f, 0.f, 0.f, 1.f,
+            near / right, 0.f, 0.f, 0.f,
+            0.f, near/top, 0.f, 0.f,
+            0.f, 0.f, -(far + near) / (far - near), - 2 * (far * near) / (far - near),
+            0.f, 0.f, -1.f, 0.f,
         };
 
         float transform[16] =
         {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
+            cos(angle) * scale, 0.f, sin(angle) * scale, bunny_x,
+            0.f, scale, 0.f, bunny_y,
+            -sin(angle) * scale, 0.f, cos(angle) * scale, -2.f,
             0.f, 0.f, 0.f, 1.f,
         };
 
