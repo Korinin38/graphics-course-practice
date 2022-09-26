@@ -140,12 +140,14 @@ int main() try
     if (!GLEW_VERSION_3_3)
         throw std::runtime_error("OpenGL 3.3 is not supported");
 
-    glClearColor(0.8f, 0.8f, 1.f, 0.f);
+//    glClearColor(0.8f, 0.8f, 1.f, 0.f);
+    glClearColor(0.3f, 0.3f, 0.3f, 0.f);
 
     auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source);
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
 
     GLuint view_location = glGetUniformLocation(program, "view");
     GLuint transform_location = glGetUniformLocation(program, "transform");
@@ -216,18 +218,8 @@ int main() try
             break;
         }
 
-        if (button_down[SDLK_LEFT]) {
-            bunny_x -= speed * dt;
-        }
-        if (button_down[SDLK_RIGHT]) {
-            bunny_x += speed * dt;
-        }
-        if (button_down[SDLK_DOWN]) {
-            bunny_y -= speed * dt;
-        }
-        if (button_down[SDLK_UP]) {
-            bunny_y += speed * dt;
-        }
+        bunny_x += speed * dt * (1.f * button_down[SDLK_RIGHT] - 1.f * button_down[SDLK_LEFT]);
+        bunny_y += speed * dt * (1.f * button_down[SDLK_UP] - 1.f * button_down[SDLK_DOWN]);
 
         if (!running)
             break;
@@ -237,8 +229,8 @@ int main() try
 
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
-        float angle = time ;
-        float scale = 0.6f;
+        float angle = time;
+        float scale = 0.7f;
 
 
         float view[16] =
@@ -259,8 +251,36 @@ int main() try
 
         glUseProgram(program);
         glBindVertexArray(points_vao);
+
+        // Bunny 1 - XZ
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
         glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+        glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
+
+        // Bunny 2 - XY
+        glCullFace(GL_FRONT);
+        float transform2[16] =
+                {
+                        cos(angle) * scale, sin(angle) * scale, 0.f, -1.1f + bunny_x,
+                        -sin(angle) * scale, cos(angle) * scale, 0.f, -0.3f + bunny_y,
+                        0.f, 0.f, scale, -2.f,
+                        0.f, 0.f, 0.f, 1.f,
+                };
+
+        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform2);
+        glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
+
+        // Bunny 3 - YZ
+        glCullFace(GL_BACK);
+        float transform3[16] =
+                {
+                        scale, 0.f, 0.f, 0.9f + bunny_x,
+                        0.f, cos(angle) * scale, -sin(angle) * scale, -0.8f + bunny_y,
+                        0.f, sin(angle) * scale, cos(angle) * scale, -2.f,
+                        0.f, 0.f, 0.f, 1.f,
+                };
+
+        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform3);
         glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
 
         SDL_GL_SwapWindow(window);
