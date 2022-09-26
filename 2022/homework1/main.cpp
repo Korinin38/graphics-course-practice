@@ -15,6 +15,7 @@
 #include <fstream>
 #include <chrono>
 #include <vector>
+#include <map>
 
 std::string to_string(std::string_view str) {
     return {str.begin(), str.end()};
@@ -84,26 +85,28 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader) {
     return result;
 }
 
-struct vec3 {
+struct vec2 {
     float x;
     float y;
-    float z;
 };
 
 class Configurer {
     //
-    float max_value = 100;
     int isolines = 10;
     int _grid_x = 100;
     int _grid_y = 100;
+    float wait = 0;
 
     Configurer() = default;
 
 public:
-    const float x0 = 0;
-    const float x1 = 0;
-    const float y0 = 0;
-    const float y1 = 0;
+    const std::uint32_t PRIMITIVE_RESTART_INDEX = 2e9;
+    const float X0 = -100;
+    const float X1 = 100;
+    const float Y0 = -100;
+    const float Y1 = 100;
+    const float MAX_VALUE = 10000;
+    const int MAX_GRID = 10000;
 
     Configurer(Configurer const&) = delete;
 
@@ -114,6 +117,24 @@ public:
         return instance;
     }
 
+    void W(int grid_x, float dt) {
+        if (wait > 0) {
+            wait -= dt;
+            return;
+        }
+        _grid_x = std::max(1, std::min(grid_x, MAX_GRID));
+        wait = 0.01;
+    }
+
+    void H(int grid_y, float dt) {
+        if (wait > 0) {
+            wait -= dt;
+            return;
+        }
+        _grid_y = std::max(1, std::min(grid_y, MAX_GRID));
+        wait = 0.01;
+    }
+
     int W() const { return _grid_x; }
 
     int H() const { return _grid_y; }
@@ -121,19 +142,54 @@ public:
 Configurer& config = Configurer::getInstance();
 
 float f(float x, float y, float t) {
-    return x * x + y * y + sin(t) * 10;
+    return x * x - y * y + sin(t) * 3000;
 }
 
-void calculate(std::vector<std::vector<float>>& vec, float time, float (* func)(float, float, float)) {
-    if (vec.size() != config.W() || vec[0].size() != config.H()) {
-        vec.resize(config.W(), std::vector<float>(config.H()));
+void set_indices(std::vector<std::uint32_t>& indices) {
+    // W columns of H+1 vertices, plus W primitive-restarts
+    int size =  config.W() * (config.H() * 2 + 3);
+    if (indices.size() != size) {
+        indices.resize(size);
     }
 
-    for (int i = 0; i < vec.size(); ++i) {
-        for (int j = 0; j < vec[i].size(); ++j) {
-            float x = config.x0 + (config.x1 - config.x0) * (float)i / (float)config.W();
-            float y = config.y0 + (config.y1 - config.y0) * (float)j / (float)config.W();
-            vec[i][j] = func(x, y, time);
+    int count = 0;
+    // vertices are enumerated this way:
+    // [ 0, 3, 6,
+    //   1, 4, 7,
+    //   2, 5, 8,...
+    for (int i = 0; i < config.W(); ++i) {
+        // Traversing columns, two at a time
+        for (int j = 0; j < config.H() + 1; ++j) {
+            indices[count++]  = i * (config.H() + 1) + j;
+            indices[count++]  = (i + 1) * (config.H() + 1) + j;
+        }
+        indices[count++] = config.PRIMITIVE_RESTART_INDEX;
+    }
+}
+
+void place_grid(std::vector<vec2>& vec, int width, int height) {
+    if (vec.size() != (config.W() + 1) * (config.H() + 1))
+        vec.resize((config.W() + 1) * (config.H() + 1));
+
+    for (int i = 0; i < config.W() + 1; ++i) {
+        for (int j = 0; j < config.H() + 1; ++j) {
+            float x = float(width) * (float)i / (float)config.W();
+            float y = float(height) * (float)j / (float)config.H();
+            vec[i * (config.H() + 1) + j] = {x, y};
+        }
+    }
+}
+
+void calculate(std::vector<float>& vec, float time, float (* func)(float, float, float)) {
+    if (vec.size() != (config.W() + 1) * (config.H() + 1)) {
+        vec.resize((config.W() + 1) * (config.H() + 1));
+    }
+
+    for (int i = 0; i < config.W() + 1; ++i) {
+        for (int j = 0; j < config.H() + 1; ++j) {
+            float x = config.X0 + (config.X1 - config.X0) * (float)i / (float)config.W();
+            float y = config.Y0 + (config.Y1 - config.Y0) * (float)j / (float)config.H();
+            vec[i * (config.H() + 1) + j] = func(x, y, time);
         }
     }
 
@@ -182,6 +238,8 @@ int main() try {
     auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source.data());
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source.data());
     auto program = create_program(vertex_shader, fragment_shader);
+    glEnable(GL_PRIMITIVE_RESTART);
+    glPrimitiveRestartIndex(config.PRIMITIVE_RESTART_INDEX);
 
     float time = 0.f;
 
@@ -189,15 +247,47 @@ int main() try {
     // Total number of points calculated = grid_density ^ 2
 
     GLint view_location = glGetUniformLocation(program, "view");
+    GLint value_limit = glGetUniformLocation(program, "max_value");
 
-    std::vector<std::vector<float>> values(config.W(), std::vector<float>(config.H()));
+    std::vector<float> values((config.W() + 1) * (config.H() + 1));
+    std::vector<vec2> pos((config.W() + 1) * (config.H() + 1));
+    std::vector<std::uint32_t> indices(10);
     calculate(values, 0, f);
-    std::cout << "Done" << std::endl;
+    place_grid(pos, width, height);
+    set_indices(indices);
+
+    GLuint grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo;
+    glGenVertexArrays(1, &grid_vao);
+    glBindVertexArray(grid_vao);
+
+    glGenBuffers(1, &grid_pos_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, grid_pos_vbo);
+    glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)(0));
+
+
+    glGenBuffers(1, &grid_val_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
+    glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, (void*)(0));
+
+    glGenBuffers(1, &grid_ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(), GL_DYNAMIC_DRAW);
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
+    std::map<SDL_Keycode, bool> button_down;
+    bool update_pos = true;
+    bool update_quality = true;
+
     bool running = true;
     while (running) {
+        auto now = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+
         for (SDL_Event event; SDL_PollEvent(&event);)
             switch (event.type) {
                 case SDL_QUIT:
@@ -209,6 +299,8 @@ int main() try {
                             width = event.window.data1;
                             height = event.window.data2;
                             glViewport(0, 0, width, height);
+                            place_grid(pos, width, height);
+                            update_pos = true;
                             break;
                     }
                     break;
@@ -217,19 +309,92 @@ int main() try {
                     else if (event.button.button == SDL_BUTTON_RIGHT) {}
                     break;
                 case SDL_KEYDOWN:
-                    if (event.key.keysym.sym == SDLK_LEFT) {}
-                    else if (event.key.keysym.sym == SDLK_RIGHT) {}
-                    else if (event.key.keysym.sym == SDLK_b) {}
+                    button_down[event.key.keysym.sym] = true;
+                    break;
+                case SDL_KEYUP:
+                    button_down[event.key.keysym.sym] = false;
                     break;
             }
+
+        if (button_down[SDLK_0]) {
+            config.W(1, dt);
+            config.H(1, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+        if (button_down[SDLK_1]) {
+            config.W(10, dt);
+            config.H(10, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+        if (button_down[SDLK_2]) {
+            config.W(100, dt);
+            config.H(100, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+        if (button_down[SDLK_3]) {
+            config.W(500, dt);
+            config.H(500, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+        if (button_down[SDLK_4]) {
+            config.W(1000, dt);
+            config.H(1000, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+        if (button_down[SDLK_5]) {
+            config.W(5000, dt);
+            config.H(5000, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+
+        if (button_down[SDLK_EQUALS]) {
+            config.W(config.W() + 1, dt);
+            config.H(config.H() + 1, dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
+        if (button_down[SDLK_MINUS]) {
+            config.W(std::max(config.W() - 1, 1), dt);
+            config.H(std::max(config.H() - 1, 1), dt);
+
+            update_pos = true;
+            update_quality = true;
+        }
 
         if (!running)
             break;
 
-        auto now = std::chrono::high_resolution_clock::now();
-        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
         last_frame_start = now;
         time += dt;
+
+        calculate(values, time, f);
+        glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
+        glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
+        if (update_pos) {
+            update_pos = false;
+            place_grid(pos, width, height);
+            glBindBuffer(GL_ARRAY_BUFFER, grid_pos_vbo);
+            glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_DYNAMIC_DRAW);
+        }
+        if (update_quality) {
+            update_quality = false;
+            set_indices(indices);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_ebo);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(), GL_DYNAMIC_DRAW);
+        }
 
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -243,10 +408,10 @@ int main() try {
 
         glUseProgram(program);
 
-//        glBindVertexArray(bezier_vao);
-        glLineWidth(3.f);
-//        glDrawArrays(GL_LINE_STRIP, 0, 0);
+        glDrawElements(GL_TRIANGLE_STRIP, indices.size(), GL_UNSIGNED_INT, (void*)(0));
+        glDrawElements(GL_LINE_STRIP, indices.size(), GL_UNSIGNED_INT, (void*)(0));
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+        glUniform1f(value_limit, config.MAX_VALUE);
 
         SDL_GL_SwapWindow(window);
     }
