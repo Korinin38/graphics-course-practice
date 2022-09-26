@@ -93,8 +93,8 @@ struct vec2 {
 class Configurer {
     //
     int isolines = 10;
-    int _grid_x = 100;
-    int _grid_y = 100;
+    unsigned int _grid_x = 100;
+    unsigned int _grid_y = 100;
     float wait = 0;
 
     Configurer() = default;
@@ -106,7 +106,7 @@ public:
     const float Y0 = -100;
     const float Y1 = 100;
     const float MAX_VALUE = 10000;
-    const int MAX_GRID = 10000;
+    const int MAX_GRID = 3000;
 
     Configurer(Configurer const&) = delete;
 
@@ -135,9 +135,9 @@ public:
         wait = 0.01;
     }
 
-    int W() const { return _grid_x; }
+    unsigned int W() const { return _grid_x; }
 
-    int H() const { return _grid_y; }
+    unsigned int H() const { return _grid_y; }
 };
 Configurer& config = Configurer::getInstance();
 
@@ -147,7 +147,7 @@ float f(float x, float y, float t) {
 
 void set_indices(std::vector<std::uint32_t>& indices) {
     // W columns of H+1 vertices, plus W primitive-restarts
-    int size =  config.W() * (config.H() * 2 + 3);
+    int size = config.W() * (config.H() * 2 + 3);
     if (indices.size() != size) {
         indices.resize(size);
     }
@@ -160,24 +160,38 @@ void set_indices(std::vector<std::uint32_t>& indices) {
     for (int i = 0; i < config.W(); ++i) {
         // Traversing columns, two at a time
         for (int j = 0; j < config.H() + 1; ++j) {
-            indices[count++]  = i * (config.H() + 1) + j;
-            indices[count++]  = (i + 1) * (config.H() + 1) + j;
+            indices[count++] = i * (config.H() + 1) + j;
+            indices[count++] = (i + 1) * (config.H() + 1) + j;
         }
         indices[count++] = config.PRIMITIVE_RESTART_INDEX;
     }
 }
 
-void place_grid(std::vector<vec2>& vec, int width, int height) {
+void place_grid(std::vector<vec2>& vec, int width, int height, bool scaled_up = false) {
     if (vec.size() != (config.W() + 1) * (config.H() + 1))
         vec.resize((config.W() + 1) * (config.H() + 1));
 
+    int limit = scaled_up ? std::max(width, height) : std::min(width, height);
     for (int i = 0; i < config.W() + 1; ++i) {
         for (int j = 0; j < config.H() + 1; ++j) {
-            float x = float(width) * (float)i / (float)config.W();
-            float y = float(height) * (float)j / (float)config.H();
+            float x = float(limit) * (float) i / (float) config.W() +
+                      (float) (scaled_up ? -std::max(limit - width, 0) : std::max(width - limit, 0)) / 2.0;
+            float y = float(limit) * (float) j / (float) config.H() +
+                      (float) (scaled_up ? -std::max(limit - height, 0) : std::max(height - limit, 0)) / 2.0;
             vec[i * (config.H() + 1) + j] = {x, y};
         }
     }
+}
+
+void place_border(unsigned int border[]) {
+    border[0] = 0;
+    border[1] = config.H() / 2;
+    border[2] = config.H();
+    border[3] = (config.W() + 1) / 2 * (config.H() + 1) + config.H();
+    border[4] = (config.W() + 1) * (config.H() + 1) - 1;
+    border[5] = config.W() * (config.H() + 1) + (config.H() + 1) / 2;
+    border[6] = config.W() * (config.H() + 1);
+    border[7] = (config.W() + 1) / 2 * (config.H() + 1);
 }
 
 void calculate(std::vector<float>& vec, float time, float (* func)(float, float, float)) {
@@ -187,12 +201,11 @@ void calculate(std::vector<float>& vec, float time, float (* func)(float, float,
 
     for (int i = 0; i < config.W() + 1; ++i) {
         for (int j = 0; j < config.H() + 1; ++j) {
-            float x = config.X0 + (config.X1 - config.X0) * (float)i / (float)config.W();
-            float y = config.Y0 + (config.Y1 - config.Y0) * (float)j / (float)config.H();
+            float x = config.X0 + (config.X1 - config.X0) * (float) i / (float) config.W();
+            float y = config.Y0 + (config.Y1 - config.Y0) * (float) j / (float) config.H();
             vec[i * (config.H() + 1) + j] = func(x, y, time);
         }
     }
-
 }
 
 int main() try {
@@ -230,10 +243,10 @@ int main() try {
     if (!GLEW_VERSION_3_3)
         throw std::runtime_error("OpenGL 3.3 is not supported");
 
-    glClearColor(.5f, .8f, 1.f, 0.f);
+    glClearColor(1.f, 1.f, 1.f, 0.f);
 
-    std::string vertex_shader_source = readFile("shaders/shader.vert");
-    std::string fragment_shader_source = readFile("shaders/shader.frag");
+    std::string vertex_shader_source = readFile("shaders/grid.vert");
+    std::string fragment_shader_source = readFile("shaders/grid.frag");
 
     auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source.data());
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source.data());
@@ -255,6 +268,8 @@ int main() try {
     calculate(values, 0, f);
     place_grid(pos, width, height);
     set_indices(indices);
+    std::uint32_t border[8];
+    place_border(border);
 
     GLuint grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo;
     glGenVertexArrays(1, &grid_vao);
@@ -264,24 +279,30 @@ int main() try {
     glBindBuffer(GL_ARRAY_BUFFER, grid_pos_vbo);
     glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)(0));
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*) (0));
 
 
     glGenBuffers(1, &grid_val_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
     glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, (void*)(0));
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, (void*) (0));
 
     glGenBuffers(1, &grid_ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(), GL_DYNAMIC_DRAW);
 
+    GLuint border_ebo;
+    glGenBuffers(1, &border_ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, border_ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 8 * sizeof(std::uint32_t), border, GL_DYNAMIC_DRAW);
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
     std::map<SDL_Keycode, bool> button_down;
+    bool scale_up = true;
     bool update_pos = true;
     bool update_quality = true;
+    bool hold_b = false;
 
     bool running = true;
     while (running) {
@@ -299,7 +320,6 @@ int main() try {
                             width = event.window.data1;
                             height = event.window.data2;
                             glViewport(0, 0, width, height);
-                            place_grid(pos, width, height);
                             update_pos = true;
                             break;
                     }
@@ -352,11 +372,20 @@ int main() try {
             update_quality = true;
         }
         if (button_down[SDLK_5]) {
-            config.W(5000, dt);
-            config.H(5000, dt);
+            config.W(2000, dt);
+            config.H(2000, dt);
 
             update_pos = true;
             update_quality = true;
+        }
+
+        if (button_down[SDLK_b] && !hold_b) {
+            hold_b = true;
+            scale_up ^= true;
+            update_pos = true;
+            update_quality = true;
+        } else if (!button_down[SDLK_b]) {
+            hold_b = false;
         }
 
         if (button_down[SDLK_EQUALS]) {
@@ -367,8 +396,8 @@ int main() try {
             update_quality = true;
         }
         if (button_down[SDLK_MINUS]) {
-            config.W(std::max(config.W() - 1, 1), dt);
-            config.H(std::max(config.H() - 1, 1), dt);
+            config.W(std::max(config.W() - 1, (unsigned) 1), dt);
+            config.H(std::max(config.H() - 1, (unsigned) 1), dt);
 
             update_pos = true;
             update_quality = true;
@@ -385,15 +414,20 @@ int main() try {
         glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
         if (update_pos) {
             update_pos = false;
-            place_grid(pos, width, height);
+            place_grid(pos, width, height, scale_up);
             glBindBuffer(GL_ARRAY_BUFFER, grid_pos_vbo);
             glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_DYNAMIC_DRAW);
+
+            place_border(border);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, border_ebo);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, 8 * sizeof(std::uint32_t), border, GL_DYNAMIC_DRAW);
         }
         if (update_quality) {
             update_quality = false;
             set_indices(indices);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_ebo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(), GL_DYNAMIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(),
+                         GL_DYNAMIC_DRAW);
         }
 
         glClear(GL_COLOR_BUFFER_BIT);
@@ -408,8 +442,14 @@ int main() try {
 
         glUseProgram(program);
 
-        glDrawElements(GL_TRIANGLE_STRIP, indices.size(), GL_UNSIGNED_INT, (void*)(0));
-        glDrawElements(GL_LINE_STRIP, indices.size(), GL_UNSIGNED_INT, (void*)(0));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_ebo);
+        glLineWidth(1.0f);
+        glDrawElements(GL_TRIANGLE_STRIP, indices.size(), GL_UNSIGNED_INT, (void*) (0));
+        glDrawElements(GL_LINE_STRIP, indices.size(), GL_UNSIGNED_INT, (void*) (0));
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, border_ebo);
+        glLineWidth(4.0f);
+        glDrawElements(GL_LINE_LOOP, 8, GL_UNSIGNED_INT, (void*) (0));
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
         glUniform1f(value_limit, config.MAX_VALUE);
 
