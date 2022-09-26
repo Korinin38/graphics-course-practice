@@ -154,6 +154,25 @@ int main() try
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
+    GLuint points_vao;
+    glGenVertexArrays(1, &points_vao);
+    glBindVertexArray(points_vao);
+
+    GLuint points_vbo;
+    glGenBuffers(1, &points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+    glBufferData(GL_ARRAY_BUFFER, bunny.vertices.size() * sizeof(obj_data::vertex), bunny.vertices.data(), GL_STATIC_DRAW);
+
+    GLuint points_ebo;
+    glGenBuffers(1, &points_ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, points_ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, bunny.indices.size() * sizeof(std::uint32_t), bunny.indices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(12));
+
     float time = 0.f;
 
     std::map<SDL_Keycode, bool> button_down;
@@ -210,8 +229,10 @@ int main() try
         };
 
         glUseProgram(program);
+        glBindVertexArray(points_vao);
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
         glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+        glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
 
         SDL_GL_SwapWindow(window);
     }
