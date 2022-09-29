@@ -1,4 +1,5 @@
 #include "main.h"
+
 #ifdef WIN32
 #include <SDL.h>
 #undef main
@@ -28,6 +29,10 @@ void sdl2_fail(std::string_view message) {
 
 void glew_fail(std::string_view message, GLenum error) {
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char*>(glewGetErrorString(error)));
+}
+
+float f(float x, float y, float t) {
+    return x * x - y * y + sin(t) * 3000;
 }
 
 int main() try {
@@ -94,15 +99,15 @@ int main() try {
     GLint value_limit = glGetUniformLocation(grid_program, "max_value");
 
     std::vector<float> values((config.W() + 1) * (config.H() + 1));
-    std::vector<vec2> pos((config.W() + 1) * (config.H() + 1));
+    std::vector<vec2> grid_pos((config.W() + 1) * (config.H() + 1));
     std::vector<std::vector<vec2>> isolines(config.isolines());
     std::vector<std::vector<std::uint32_t>> iso_indices(config.isolines());
     std::vector<std::uint32_t> indices(10);
     bool scale_up = true;
-    calculate(values, isolines, 0, f);
-    place_grid(pos, width, height);
-    set_indices(indices);
-    set_isolines(isolines, iso_indices, values, width, height, scale_up);
+    calculate_grid(values, 0, f);
+    place_grid(grid_pos, width, height);
+    set_grid_indices(indices);
+    calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
 
 
     GLuint grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo;
@@ -110,7 +115,7 @@ int main() try {
     glGenBuffers(1, &grid_pos_vbo);
     glGenBuffers(1, &grid_val_vbo);
     glGenBuffers(1, &grid_ebo);
-    set_buffers_grid(grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo, pos, values, indices);
+    set_buffers_grid(grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo, grid_pos, values, indices);
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -118,8 +123,12 @@ int main() try {
     GLuint iso_vao, iso_vbo[config.MAX_ISOLINES], iso_ebo[config.MAX_ISOLINES];
 
     glGenVertexArrays(1, &iso_vao);
-    glGenBuffers(config.MAX_ISOLINES, iso_vbo);
-    glGenBuffers(config.MAX_ISOLINES, iso_ebo);
+    for (int i = 0; i < config.MAX_ISOLINES; ++i) {
+        glGenBuffers(1, &iso_vbo[i]);
+        glGenBuffers(1, &iso_ebo[i]);
+    }
+//    glGenBuffers(config.MAX_ISOLINES, iso_vbo);
+//    glGenBuffers(config.MAX_ISOLINES, iso_ebo);
     set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
     vec2 test = {0, 0};
     for (int i = 0; i < 8; ++i) {
@@ -175,27 +184,41 @@ int main() try {
         last_frame_start = now;
         time += dt;
 
-        calculate(values, isolines, time, f);
+        calculate_grid(values, time, f);
+        calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
         glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
         glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
+        set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
         if (update_pos) {
             update_pos = false;
-            place_grid(pos, width, height, scale_up);
-            set_isolines(isolines, iso_indices, values, width, height, scale_up);
+            place_grid(grid_pos, width, height, scale_up);
 
             glBindBuffer(GL_ARRAY_BUFFER, grid_pos_vbo);
-            glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_DYNAMIC_DRAW);
-            set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
+            glBufferData(GL_ARRAY_BUFFER, grid_pos.size() * sizeof(vec2), grid_pos.data(), GL_DYNAMIC_DRAW);
         }
         if (update_quality) {
             update_quality = false;
-            set_indices(indices);
-            set_isolines(isolines, iso_indices, values, width, height, scale_up);
+            set_grid_indices(indices);
 
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, grid_ebo);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(),
                          GL_DYNAMIC_DRAW);
-            set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
+        }
+
+        vec2 test = {0, 0};
+        glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[0]);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[0]);
+        for (int i = 0; i < iso_indices[0].size(); ++i) {
+            uint32_t idx;
+            glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, sizeof(std::uint32_t) * i, sizeof(std::uint32_t), &idx);
+            if (idx == config.PRIMITIVE_RESTART_INDEX) {
+                std::cout << idx << std::endl;
+                continue;
+            }
+            glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vec2) * (idx), sizeof(vec2), &test);
+
+            std::cout << idx << " - " << isolines[0][idx].x << " " << isolines[0][idx].y << ":" << test.x << " " << test.y << std::endl;
+//                      << "=" << f(test.x, test.y, 0) << std::endl;
         }
 
         glClear(GL_COLOR_BUFFER_BIT);
@@ -219,8 +242,10 @@ int main() try {
         glUniform1f(value_limit, config.MAX_VALUE);
 
         glUseProgram(iso_program);
-        for (int i = 0; i < isolines.size(); ++i) {
-            glBindVertexArray(iso_vao);
+        glBindVertexArray(iso_vao);
+        glUniformMatrix4fv(view_location_iso, 1, GL_TRUE, view);
+//        for (int i = 0; i < isolines.size(); ++i) {
+        for (int i = 0; i < 1; ++i) {
             glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[i]);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[i]);
 
@@ -228,7 +253,6 @@ int main() try {
             glDrawElements(GL_LINE_STRIP, iso_indices[i].size(), GL_UNSIGNED_INT, (void*) (0));
         }
 
-        glUniformMatrix4fv(view_location_iso, 1, GL_TRUE, view);
 
         SDL_GL_SwapWindow(window);
     }
