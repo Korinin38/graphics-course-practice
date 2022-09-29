@@ -107,7 +107,7 @@ int main() try {
     calculate_grid(values, 0, f);
     place_grid(grid_pos, width, height);
     set_grid_indices(indices);
-    calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
+//    calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
 
 
     GLuint grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo;
@@ -127,17 +127,16 @@ int main() try {
         glGenBuffers(1, &iso_vbo[i]);
         glGenBuffers(1, &iso_ebo[i]);
     }
-//    glGenBuffers(config.MAX_ISOLINES, iso_vbo);
-//    glGenBuffers(config.MAX_ISOLINES, iso_ebo);
-    set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
-    vec2 test = {0, 0};
-    for (int i = 0; i < 8; ++i) {
-        std::cout << isolines[0][i].x << " " << isolines[0][i].y << ": ";
-        glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(float) * (2 * i), sizeof(float), &test.x);
-        glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(float) * (2 * i) + sizeof(float), sizeof(float), &test.y);
 
-        std::cout << test.x << " " << test.y << std::endl;
-    }
+    set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
+//    vec2 test = {0, 0};
+//    for (int i = 0; i < 8; ++i) {
+//        std::cout << isolines[0][i].x << " " << isolines[0][i].y << ": ";
+//        glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(float) * (2 * i), sizeof(float), &test.x);
+//        glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(float) * (2 * i) + sizeof(float), sizeof(float), &test.y);
+//
+//        std::cout << test.x << " " << test.y << std::endl;
+//    }
 
 
     std::map<SDL_Keycode, bool> button_down;
@@ -205,21 +204,21 @@ int main() try {
                          GL_DYNAMIC_DRAW);
         }
 
-        vec2 test = {0, 0};
-        glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[0]);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[0]);
-        for (int i = 0; i < iso_indices[0].size(); ++i) {
-            uint32_t idx;
-            glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, sizeof(std::uint32_t) * i, sizeof(std::uint32_t), &idx);
-            if (idx == config.PRIMITIVE_RESTART_INDEX) {
-                std::cout << idx << std::endl;
-                continue;
-            }
-            glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vec2) * (idx), sizeof(vec2), &test);
-
-            std::cout << idx << " - " << isolines[0][idx].x << " " << isolines[0][idx].y << ":" << test.x << " " << test.y << std::endl;
-//                      << "=" << f(test.x, test.y, 0) << std::endl;
-        }
+//        vec2 test = {0, 0};
+//        glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[0]);
+//        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[0]);
+//        for (int i = 0; i < iso_indices[0].size(); ++i) {
+//            uint32_t idx;
+//            glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, sizeof(std::uint32_t) * i, sizeof(std::uint32_t), &idx);
+//            if (idx == config.PRIMITIVE_RESTART_INDEX) {
+//                std::cout << idx << std::endl;
+//                continue;
+//            }
+//            glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vec2) * (idx), sizeof(vec2), &test);
+//
+//            std::cout << idx << " - " << isolines[0][idx].x << " " << isolines[0][idx].y << ":" << test.x << " " << test.y << std::endl;
+////                      << "=" << f(test.x, test.y, 0) << std::endl;
+//        }
 
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -244,8 +243,8 @@ int main() try {
         glUseProgram(iso_program);
         glBindVertexArray(iso_vao);
         glUniformMatrix4fv(view_location_iso, 1, GL_TRUE, view);
-//        for (int i = 0; i < isolines.size(); ++i) {
-        for (int i = 0; i < 1; ++i) {
+        for (int i = 0; i < isolines.size(); ++i) {
+//        for (int i = 0; i < 1; ++i) {
             glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[i]);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[i]);
 

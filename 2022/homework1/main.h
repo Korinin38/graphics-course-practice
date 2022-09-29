@@ -137,8 +137,28 @@ public:
 };
 Configurer& config = Configurer::getInstance();
 
-std::uint32_t index(int i, int j) {
+std::uint32_t grid_index(int i, int j) {
     return i * (config.H() + 1) + j;
+}
+
+std::uint32_t iso_index(int i, int j, int edge) {
+    if (i == config.W() - 1 && edge == 1) {
+        return (grid_index(i + 1, j) * 3 + i + 1) + j;
+    }
+    switch(edge) {
+        case 0:
+            return grid_index(i, j) * 3 + i;
+        case 1:
+            return grid_index(i + 1, j) * 3 + i + 2;
+        case 2:
+            return grid_index(i, j) * 3 + i + 1;
+        case 3:
+            return grid_index(i, j) * 3 + i + 2;
+        case 4:
+            return grid_index(i, j + 1) * 3 + i;
+        default:
+            throw std::runtime_error("Error while picking edge");
+    }
 }
 
 void set_grid_indices(std::vector<std::uint32_t>& indices) {
@@ -153,8 +173,8 @@ void set_grid_indices(std::vector<std::uint32_t>& indices) {
     for (int i = 0; i < config.W(); ++i) {
         // Traversing columns, two at a time
         for (int j = 0; j < config.H() + 1; ++j) {
-            indices[count++] = index(i, j);
-            indices[count++] = index(i + 1, j);
+            indices[count++] = grid_index(i, j);
+            indices[count++] = grid_index(i + 1, j);
         }
         indices[count++] = config.PRIMITIVE_RESTART_INDEX;
     }
@@ -171,7 +191,7 @@ void place_grid(std::vector<vec2>& vec, int width, int height, bool scaled_up = 
         for (int j = 0; j < config.H() + 1; ++j) {
             float x = float(limit) * (float) i / (float) config.W() + dx;
             float y = float(limit) * (float) j / (float) config.H() + dy;
-            vec[index(i, j)] = {x, y};
+            vec[grid_index(i, j)] = {x, y};
         }
     }
 }
@@ -193,30 +213,30 @@ vec2 interpolate(vec2 pos1, float val1, vec2 pos2, float val2, float iso_val) {
     return {pos2.x * q + pos1.x * (1 - q), pos2.y * q + pos1.y * (1 - q)};
 }
 
-void parse_configuration(std::vector<std::uint32_t>& indices, const uint32_t edge[3], unsigned char configuration,
+void parse_configuration(std::vector<std::uint32_t>& indices, int i, int j, const int edge, unsigned char configuration,
                          bool top) {
     switch (configuration) {
         case 1:
         case 6:
             if (top) {
-                indices.push_back(edge[0]);
+                indices.push_back(iso_index(i, j, edge));
             }
-            indices.push_back(edge[2]);
+            indices.push_back(iso_index(i, j, edge + 2));
             break;
         case 2:
         case 5:
             if (top) {
-                indices.push_back(edge[0]);
+                indices.push_back(iso_index(i, j, edge));
             }
-            indices.push_back(edge[1]);
+            indices.push_back(iso_index(i, j, edge + 1));
             indices.push_back(config.PRIMITIVE_RESTART_INDEX);
             break;
         case 3:
         case 4:
             if (!indices.empty() && indices.back() != config.PRIMITIVE_RESTART_INDEX)
                 indices.push_back(config.PRIMITIVE_RESTART_INDEX);
-            indices.push_back(edge[1]);
-            indices.push_back(edge[2]);
+            indices.push_back(iso_index(i, j, edge + 1));
+            indices.push_back(iso_index(i, j, edge + 2));
             break;
         case 0:
         case 7:
@@ -226,40 +246,43 @@ void parse_configuration(std::vector<std::uint32_t>& indices, const uint32_t edg
     }
 }
 
-void calculate_isolines(std::vector<std::vector<vec2>>& iso,
+void calculate_isolines(std::vector<std::vector<vec2>>& pos,
                         std::vector<std::vector<std::uint32_t>>& indices,
-                        const std::vector<float>& vec,
+                        const std::vector<float>& vals,
                         int width, int height, bool scaled_up = false) {
-    // Vec must be correctly filled!
-    if (vec.size() != (config.W() + 1) * (config.H() + 1))
-        throw std::runtime_error("'vec' must be correctly filled before calculating isolines");
+    // Vals must be correctly filled!
+    if (vals.size() != (config.W() + 1) * (config.H() + 1))
+        throw std::runtime_error("'vals' must be correctly filled before calculating isolines");
 
     int limit = scaled_up ? std::max(width, height) : std::min(width, height);
     float dx = (float) (scaled_up ? -std::max(limit - width, 0) : std::max(width - limit, 0)) / 2.0f;
     float dy = (float) (scaled_up ? -std::max(limit - height, 0) : std::max(height - limit, 0)) / 2.0f;
 
-    iso.resize(config.isolines());
+    pos.resize(config.isolines());
     indices.resize(config.isolines());
 
-    // First iso is always a boarder of graph
-    iso[0].resize(8);
-    iso[0][0] = {dx, dy};
-    iso[0][1] = {dx, float(limit) / 2.0f + dy};
-    iso[0][2] = {dx, float(limit) + dy};
-    iso[0][3] = {float(limit) / 2.0f + dx, float(limit) + dy};
-    iso[0][4] = {float(limit) + dx, float(limit) + dy};
-    iso[0][5] = {float(limit) + dx, float(limit) / 2.0f + dy};
-    iso[0][6] = {float(limit) + dx, dy};
-    iso[0][7] = {float(limit) / 2.0f + dx, dy};
+    // First pos is always a boarder of graph
+    pos[0].resize(8);
+    pos[0][0] = {dx, dy};
+    pos[0][1] = {dx, float(limit) / 2.0f + dy};
+    pos[0][2] = {dx, float(limit) + dy};
+    pos[0][3] = {float(limit) / 2.0f + dx, float(limit) + dy};
+    pos[0][4] = {float(limit) + dx, float(limit) + dy};
+    pos[0][5] = {float(limit) + dx, float(limit) / 2.0f + dy};
+    pos[0][6] = {float(limit) + dx, dy};
+    pos[0][7] = {float(limit) / 2.0f + dx, dy};
     indices[0] = {0, 1, 2, 3, 4, 5, 6, 7, 0};
 
-    for (int cur_isoline = 1; cur_isoline < iso.size(); ++cur_isoline) {
-        iso[cur_isoline].resize(config.W() * config.H() * 3 + config.W() + config.H());
+    for (int cur_isoline = 1; cur_isoline < pos.size(); ++cur_isoline) {
+        pos[cur_isoline] = {{0, 0}};
+//        std::cout << "GG" << std::endl;
+        pos[cur_isoline].resize(config.W() * config.H() * 3 + config.W() + config.H());
+//        std::cout << "gg" << std::endl;
         indices[cur_isoline].clear();
         float iso_value = (config.MAX_VALUE * 2) * cur_isoline / config.isolines() - config.MAX_VALUE;
         for (int i = 0; i < config.W(); ++i) {
             for (int j = 0; j < config.H(); ++j) {
-                // Edges are counted as (index pf up-leftmost vertex) * 3 +
+                // Edges are counted as (grid_index pf up-leftmost vertex) * 3 +
                 //   --0--
                 //   |\
                 //   2 1
@@ -271,18 +294,14 @@ void calculate_isolines(std::vector<std::vector<vec2>>& iso,
                 //   3 2 1
                 //   |  \|
                 //   --4--
-                const uint32_t edge[5] = {index(i, j) * 3 + i,
-                                          index(i + 1, j) * 3 + i + 2,
-                                          index(i, j) * 3 + i + 1,
-                                          index(i, j) * 3 + i + 2,
-                                          index(i, j + 1) * 3 + i};
+
                 //  0---1
                 //  | \ |
                 //  3---2
-                const float v_val[4] = {vec[index(i, j)],
-                                        vec[index(i + 1, j)],
-                                        vec[index(i + 1, j + 1)],
-                                        vec[index(i, j + 1)]};
+                const float v_val[4] = {vals[grid_index(i, j)],
+                                        vals[grid_index(i + 1, j)],
+                                        vals[grid_index(i + 1, j + 1)],
+                                        vals[grid_index(i, j + 1)]};
 
                 const vec2 v_pos[4] = {{1.0f * limit * i / config.W() + dx,
                                                1.0f * limit * j / config.H() + dy},
@@ -293,21 +312,21 @@ void calculate_isolines(std::vector<std::vector<vec2>>& iso,
                                        {1.0f * limit * i / config.W() + dx,
                                                1.0f * limit * (j + 1) / config.H() + dy}};
                 // TODO: ALL OF IT!
-                iso[cur_isoline][edge[0]] = interpolate(v_pos[0], v_val[0], v_pos[1], v_val[1], iso_value);
-                iso[cur_isoline][edge[1]] = interpolate(v_pos[1], v_val[1], v_pos[2], v_val[2], iso_value);
-                iso[cur_isoline][edge[2]] = interpolate(v_pos[0], v_val[0], v_pos[2], v_val[2], iso_value);
-                iso[cur_isoline][edge[3]] = interpolate(v_pos[0], v_val[0], v_pos[3], v_val[3], iso_value);
-                iso[cur_isoline][edge[4]] = interpolate(v_pos[3], v_val[3], v_pos[2], v_val[2], iso_value);
+                pos[cur_isoline][iso_index(i, j, 0)] = interpolate(v_pos[0], v_val[0], v_pos[1], v_val[1], iso_value);
+                pos[cur_isoline][iso_index(i, j, 1)] = interpolate(v_pos[0], v_val[0], v_pos[2], v_val[2], iso_value);
+                pos[cur_isoline][iso_index(i, j, 2)] = interpolate(v_pos[1], v_val[1], v_pos[2], v_val[2], iso_value);
+                pos[cur_isoline][iso_index(i, j, 3)] = interpolate(v_pos[0], v_val[0], v_pos[3], v_val[3], iso_value);
+                pos[cur_isoline][iso_index(i, j, 4)] = interpolate(v_pos[3], v_val[3], v_pos[2], v_val[2], iso_value);
 
 
                 unsigned char configuration = variation(v_val[0], v_val[1], v_val[2], iso_value);
-//                int ind_index = indices[cur_isoline].size();
+//                std::uint32_t ind_index = indices[cur_isoline].size();
 //                if (i == 0) {
 //                    std::cout << "Cfg " << i << ", " << j << "   " << (int) configuration
 //                              << " + " << (int) variation(v_val[2], v_val[0], v_val[3], iso_value) << std::endl;
 //                    for (int k = 0; k < 5; ++k) {
-//                        std::cout << k << ": (" << iso[cur_isoline][edge[k]].x << ", "
-//                                  << iso[cur_isoline][edge[k]].y << ") "
+//                        std::cout << k << ": (" << pos[cur_isoline][iso_index(i, j, k)].x << ", "
+//                                  << pos[cur_isoline][iso_index(i, j, k)].y << ") "
 //                                  << std::endl;
 //                    }
 //                    for (int k = 0; k < 4; ++k) {
@@ -316,9 +335,9 @@ void calculate_isolines(std::vector<std::vector<vec2>>& iso,
 //                    }
 //                }
 
-//                parse_configuration(indices[cur_isoline], &edge[0], configuration, (j == 0));
-//                parse_configuration(indices[cur_isoline], &edge[2], variation(v_val[2], v_val[0], v_val[3], iso_value),
-//                                    false);
+                parse_configuration(indices[cur_isoline], i, j, 0, configuration, (j == 0));
+                parse_configuration(indices[cur_isoline], i, j, 2, variation(v_val[2], v_val[0], v_val[3], iso_value),
+                                    false);
 //                if (i == 0) {
 //                    std::cout << "Indices:" << std::endl;
 //                    for (ind_index; ind_index < indices[cur_isoline].size(); ++ind_index) {
@@ -326,9 +345,10 @@ void calculate_isolines(std::vector<std::vector<vec2>>& iso,
 //                            std::cout << indices[cur_isoline][ind_index] << std::endl;
 //                            continue;
 //                        }
-//                        std::cout << indices[cur_isoline][ind_index] << ": ("
-//                                  << iso[cur_isoline][indices[cur_isoline][ind_index]].x << ", "
-//                                  << iso[cur_isoline][indices[cur_isoline][ind_index]].y << ")" << std::endl;
+//                        std::cout << indices[cur_isoline][ind_index] << ":";
+////                        std::cout << std::endl;
+//                        std::cout << " (" << pos[cur_isoline][indices[cur_isoline][ind_index]].x << ", "
+//                                  << pos[cur_isoline][indices[cur_isoline][ind_index]].y << ")" << std::endl;
 //                    }
 //                }
             }
@@ -345,7 +365,7 @@ void calculate_grid(std::vector<float>& vec, float time,
         for (int j = 0; j < config.H() + 1; ++j) {
             float x = config.X0 + (config.X1 - config.X0) * (float) i / (float) config.W();
             float y = config.Y0 + (config.Y1 - config.Y0) * (float) j / (float) config.H();
-            vec[index(i, j)] = func(x, y, time);
+            vec[grid_index(i, j)] = func(x, y, time);
         }
     }
 }
