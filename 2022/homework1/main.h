@@ -391,26 +391,22 @@ void set_buffers_grid(GLuint& vao, GLuint& pos_vbo, GLuint& val_vbo, GLuint& ebo
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(), GL_DYNAMIC_DRAW);
 }
 
-void set_buffers_iso(GLuint& vao, GLuint vbo[], GLuint ebo[],
-                     std::vector<std::vector<vec2>> const& pos,
-                     std::vector<std::vector<std::uint32_t>> const& indices) {
+void set_buffers_iso(GLuint& vao, GLuint& vbo, GLuint& ebo,
+                     std::vector<vec2> const& pos,
+                     std::vector<std::uint32_t> const& indices) {
     glBindVertexArray(vao);
 
-    for (int i = 0; i < pos.size(); ++i) {
 //    for (int i = 0; i < 1; ++i) {
-        glBindBuffer(GL_ARRAY_BUFFER, vbo[i]);
-        glBufferData(GL_ARRAY_BUFFER, pos[i].size() * sizeof(vec2), pos[i].data(), GL_STREAM_DRAW);
-    }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_STREAM_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*) (0));
 
-    for (int i = 0; i < indices.size(); ++i) {
 //    for (int i = 0; i < 1; ++i) {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo[i]);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices[i].size() * sizeof(std::uint32_t), indices[i].data(),
-                     GL_STREAM_DRAW);
-    }
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(),
+                 GL_STREAM_DRAW);
 }
 
 void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,

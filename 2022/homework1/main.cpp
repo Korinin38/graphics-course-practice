@@ -120,15 +120,13 @@ int main() try {
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
 
-    GLuint iso_vao, iso_vbo[config.MAX_ISOLINES], iso_ebo[config.MAX_ISOLINES];
+    GLuint iso_vao, iso_vbo, iso_ebo;
 
     glGenVertexArrays(1, &iso_vao);
-    for (int i = 0; i < config.MAX_ISOLINES; ++i) {
-        glGenBuffers(1, &iso_vbo[i]);
-        glGenBuffers(1, &iso_ebo[i]);
-    }
+    glGenBuffers(1, &iso_vbo);
+    glGenBuffers(1, &iso_ebo);
 
-    set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
+    set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines[0], iso_indices[0]);
 //    vec2 test = {0, 0};
 //    for (int i = 0; i < 8; ++i) {
 //        std::cout << isolines[0][i].x << " " << isolines[0][i].y << ": ";
@@ -187,7 +185,6 @@ int main() try {
         calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
         glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
         glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
-        set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines, iso_indices);
         if (update_pos) {
             update_pos = false;
             place_grid(grid_pos, width, height, scale_up);
@@ -245,8 +242,9 @@ int main() try {
         glUniformMatrix4fv(view_location_iso, 1, GL_TRUE, view);
         for (int i = 0; i < isolines.size(); ++i) {
 //        for (int i = 0; i < 1; ++i) {
-            glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[i]);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[i]);
+            set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines[i], iso_indices[i]);
+//            glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[i]);
+//            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[i]);
 
             glLineWidth(i ? 1.0f : 4.0f);
             glDrawElements(GL_LINE_STRIP, iso_indices[i].size(), GL_UNSIGNED_INT, (void*) (0));
