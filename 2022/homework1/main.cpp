@@ -31,8 +31,16 @@ void glew_fail(std::string_view message, GLenum error) {
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char*>(glewGetErrorString(error)));
 }
 
-float f(float x, float y, float t) {
+float sub_squares(float x, float y, float t) {
     return x * x - y * y + sin(t) * 3000;
+}
+
+float something(float x, float y, float t) {
+    return cos(x / 2) * cos(cos(x / 2) / 2) - sin(y)  * sin(y)  * sin(y) + x * t * t + sin(t) * 3000;
+}
+
+float circles(float x, float y, float t) {
+    return config.MAX_VALUE / 2 - fmod(x * x + y * y + config.MAX_VALUE / 2 * cos(t * 0.33),  config.MAX_VALUE * sin(t));
 }
 
 int main() try {
@@ -79,6 +87,9 @@ int main() try {
             create_shader(GL_VERTEX_SHADER, iso_v_shader_source.data()),
             create_shader(GL_FRAGMENT_SHADER, iso_frag_shader_source.data()));
 
+    glEnable(GL_PRIMITIVE_RESTART);
+    glPrimitiveRestartIndex(config.PRIMITIVE_RESTART_INDEX);
+
     std::string grid_v_shader_source = readFile("shaders/grid.vert");
     std::string grid_frag_shader_source = readFile("shaders/grid.frag");
 
@@ -98,17 +109,27 @@ int main() try {
     GLint view_location_iso = glGetUniformLocation(iso_program, "view");
     GLint value_limit = glGetUniformLocation(grid_program, "max_value");
 
+    const int FUNCS = 3;
+    float (* funcs[])(float, float, float) = {sub_squares, something, circles};
+
     std::vector<float> values((config.W() + 1) * (config.H() + 1));
     std::vector<vec2> grid_pos((config.W() + 1) * (config.H() + 1));
     std::vector<std::vector<vec2>> isolines(config.isolines());
     std::vector<std::vector<std::uint32_t>> iso_indices(config.isolines());
     std::vector<std::uint32_t> indices(10);
-    bool scale_up = true;
-    calculate_grid(values, 0, f);
+    bool scale_up = false;
+    calculate_grid(values, 0, funcs[0]);
+    calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
     place_grid(grid_pos, width, height);
     set_grid_indices(indices);
-//    calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
 
+    std::cout << "Indices:" << std::endl;
+    for (int i = 0; i < iso_indices[1].size(); ++i) {
+        std::cout << iso_indices[1][i] << " ";
+        if (iso_indices[1][i] == config.PRIMITIVE_RESTART_INDEX) {
+            std::cout << std::endl;
+        }
+    }
 
     GLuint grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo;
     glGenVertexArrays(1, &grid_vao);
@@ -127,20 +148,14 @@ int main() try {
     glGenBuffers(1, &iso_ebo);
 
     set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines[0], iso_indices[0]);
-//    vec2 test = {0, 0};
-//    for (int i = 0; i < 8; ++i) {
-//        std::cout << isolines[0][i].x << " " << isolines[0][i].y << ": ";
-//        glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(float) * (2 * i), sizeof(float), &test.x);
-//        glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(float) * (2 * i) + sizeof(float), sizeof(float), &test.y);
-//
-//        std::cout << test.x << " " << test.y << std::endl;
-//    }
-
 
     std::map<SDL_Keycode, bool> button_down;
     bool update_pos = true;
     bool update_quality = true;
     bool hold_b = false;
+    bool draw_iso = false;
+    bool pause = false;
+    int cur_func = 0;
 
     bool running = true;
     while (running) {
@@ -173,15 +188,18 @@ int main() try {
                     button_down[event.key.keysym.sym] = false;
                     break;
             }
-        primitive_button_handler(button_down, dt, update_pos, update_quality, scale_up, hold_b);
+//        primitive_button_handler(button_down, dt, update_pos, update_quality, scale_up, hold_b, pause, cur_func);
+        primitive_button_handler(button_down, dt, update_pos, update_quality, draw_iso, hold_b, pause, cur_func);
 
         if (!running)
             break;
 
         last_frame_start = now;
-        time += dt;
+        if (!pause)
+            time += dt;
 
-        calculate_grid(values, time, f);
+//        calculate_grid(values, time, sub_squares);
+        calculate_grid(values, time, funcs[cur_func]);
         calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
         glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
         glBufferData(GL_ARRAY_BUFFER, values.size() * sizeof(float), values.data(), GL_STREAM_DRAW);
@@ -201,28 +219,12 @@ int main() try {
                          GL_DYNAMIC_DRAW);
         }
 
-//        vec2 test = {0, 0};
-//        glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[0]);
-//        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[0]);
-//        for (int i = 0; i < iso_indices[0].size(); ++i) {
-//            uint32_t idx;
-//            glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, sizeof(std::uint32_t) * i, sizeof(std::uint32_t), &idx);
-//            if (idx == config.PRIMITIVE_RESTART_INDEX) {
-//                std::cout << idx << std::endl;
-//                continue;
-//            }
-//            glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vec2) * (idx), sizeof(vec2), &test);
-//
-//            std::cout << idx << " - " << isolines[0][idx].x << " " << isolines[0][idx].y << ":" << test.x << " " << test.y << std::endl;
-////                      << "=" << f(test.x, test.y, 0) << std::endl;
-//        }
-
         glClear(GL_COLOR_BUFFER_BIT);
 
         float view[16] =
                 {
                         2.f / width, 0.f, 0.f, -1.f,
-                        0.f, 2.f / height, 0.f, -1.f,
+                        0.f, -2.f / height, 0.f, 1.f,
                         0.f, 0.f, 1.f, 0.f,
                         0.f, 0.f, 0.f, 1.f,
                 };
@@ -241,13 +243,11 @@ int main() try {
         glBindVertexArray(iso_vao);
         glUniformMatrix4fv(view_location_iso, 1, GL_TRUE, view);
         for (int i = 0; i < isolines.size(); ++i) {
-//        for (int i = 0; i < 1; ++i) {
             set_buffers_iso(iso_vao, iso_vbo, iso_ebo, isolines[i], iso_indices[i]);
-//            glBindBuffer(GL_ARRAY_BUFFER, iso_vbo[i]);
-//            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iso_ebo[i]);
 
             glLineWidth(i ? 1.0f : 4.0f);
-            glDrawElements(GL_LINE_STRIP, iso_indices[i].size(), GL_UNSIGNED_INT, (void*) (0));
+            if (draw_iso || i == 0)
+                glDrawElements(GL_LINE_STRIP, iso_indices[i].size(), GL_UNSIGNED_INT, (void*) (0));
         }
 
 

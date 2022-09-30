@@ -78,7 +78,7 @@ struct vec2 {
 
 class Configurer {
     //
-    unsigned int _isolines = 2;
+    unsigned int _isolines = 3;
     unsigned int _grid_x = 30;
     unsigned int _grid_y = 30;
     float wait = 0;
@@ -86,14 +86,14 @@ class Configurer {
     Configurer() = default;
 
 public:
-    const std::uint32_t PRIMITIVE_RESTART_INDEX = 2e9;
+    const std::uint32_t PRIMITIVE_RESTART_INDEX = 1e7;
     const float X0 = -100;
-    const float X1 = 80;
+    const float X1 = 100;
     const float Y0 = -100;
-    const float Y1 = 80;
+    const float Y1 = 100;
     const float MAX_VALUE = 10000;
-    const unsigned int MAX_ISOLINES = 100;
-    const unsigned int MAX_GRID = 3000;
+    const unsigned int MAX_ISOLINES = 30;
+    const unsigned int MAX_GRID = 300;
 
     Configurer(Configurer const&) = delete;
 
@@ -126,9 +126,14 @@ public:
 
     unsigned int H() const { return _grid_y; }
 
-    void isolines(unsigned int iso_num) {
+    void isolines(unsigned int iso_num, float dt) {
+        if (wait > 0) {
+            wait -= dt;
+            return;
+        }
         if (iso_num < 2 || iso_num > MAX_ISOLINES) { return; }
         _isolines = iso_num;
+        wait = 0.06;
     }
 
     unsigned int isolines() const {
@@ -143,19 +148,19 @@ std::uint32_t grid_index(int i, int j) {
 
 std::uint32_t iso_index(int i, int j, int edge) {
     if (i == config.W() - 1 && edge == 1) {
-        return (grid_index(i + 1, j) * 3 + i + 1) + j;
+        return ((i + 1) * config.H()) * 3 + (i + 1) + j;
     }
     switch(edge) {
         case 0:
-            return grid_index(i, j) * 3 + i;
+            return (i * config.H() + j) * 3 + i;
         case 1:
-            return grid_index(i + 1, j) * 3 + i + 2;
+            return ((i + 1) * config.H() + j) * 3 + (i + 1) + 2;
         case 2:
-            return grid_index(i, j) * 3 + i + 1;
+            return (i * config.H() + j) * 3 + i + 1;
         case 3:
-            return grid_index(i, j) * 3 + i + 2;
+            return (i * config.H() + j) * 3 + i + 2;
         case 4:
-            return grid_index(i, j + 1) * 3 + i;
+            return (i * config.H() + j + 1) * 3 + i;
         default:
             throw std::runtime_error("Error while picking edge");
     }
@@ -275,9 +280,7 @@ void calculate_isolines(std::vector<std::vector<vec2>>& pos,
 
     for (int cur_isoline = 1; cur_isoline < pos.size(); ++cur_isoline) {
         pos[cur_isoline] = {{0, 0}};
-//        std::cout << "GG" << std::endl;
         pos[cur_isoline].resize(config.W() * config.H() * 3 + config.W() + config.H());
-//        std::cout << "gg" << std::endl;
         indices[cur_isoline].clear();
         float iso_value = (config.MAX_VALUE * 2) * cur_isoline / config.isolines() - config.MAX_VALUE;
         for (int i = 0; i < config.W(); ++i) {
@@ -313,16 +316,16 @@ void calculate_isolines(std::vector<std::vector<vec2>>& pos,
                                                1.0f * limit * (j + 1) / config.H() + dy}};
                 // TODO: ALL OF IT!
                 pos[cur_isoline][iso_index(i, j, 0)] = interpolate(v_pos[0], v_val[0], v_pos[1], v_val[1], iso_value);
-                pos[cur_isoline][iso_index(i, j, 1)] = interpolate(v_pos[0], v_val[0], v_pos[2], v_val[2], iso_value);
-                pos[cur_isoline][iso_index(i, j, 2)] = interpolate(v_pos[1], v_val[1], v_pos[2], v_val[2], iso_value);
+                pos[cur_isoline][iso_index(i, j, 1)] = interpolate(v_pos[1], v_val[1], v_pos[2], v_val[2], iso_value);
+                pos[cur_isoline][iso_index(i, j, 2)] = interpolate(v_pos[0], v_val[0], v_pos[2], v_val[2], iso_value);
                 pos[cur_isoline][iso_index(i, j, 3)] = interpolate(v_pos[0], v_val[0], v_pos[3], v_val[3], iso_value);
                 pos[cur_isoline][iso_index(i, j, 4)] = interpolate(v_pos[3], v_val[3], v_pos[2], v_val[2], iso_value);
 
 
-                unsigned char configuration = variation(v_val[0], v_val[1], v_val[2], iso_value);
+                unsigned char var1 = variation(v_val[0], v_val[1], v_val[2], iso_value);
 //                std::uint32_t ind_index = indices[cur_isoline].size();
 //                if (i == 0) {
-//                    std::cout << "Cfg " << i << ", " << j << "   " << (int) configuration
+//                    std::cout << "Cfg " << i << ", " << j << "   " << (int) var1
 //                              << " + " << (int) variation(v_val[2], v_val[0], v_val[3], iso_value) << std::endl;
 //                    for (int k = 0; k < 5; ++k) {
 //                        std::cout << k << ": (" << pos[cur_isoline][iso_index(i, j, k)].x << ", "
@@ -335,9 +338,9 @@ void calculate_isolines(std::vector<std::vector<vec2>>& pos,
 //                    }
 //                }
 
-                parse_configuration(indices[cur_isoline], i, j, 0, configuration, (j == 0));
-                parse_configuration(indices[cur_isoline], i, j, 2, variation(v_val[2], v_val[0], v_val[3], iso_value),
-                                    false);
+                parse_configuration(indices[cur_isoline], i, j, 0, var1, (j == 0));
+                unsigned char var2 = variation(v_val[2], v_val[0], v_val[3], iso_value);
+                parse_configuration(indices[cur_isoline], i, j, 2, var2, false);
 //                if (i == 0) {
 //                    std::cout << "Indices:" << std::endl;
 //                    for (ind_index; ind_index < indices[cur_isoline].size(); ++ind_index) {
@@ -396,14 +399,12 @@ void set_buffers_iso(GLuint& vao, GLuint& vbo, GLuint& ebo,
                      std::vector<std::uint32_t> const& indices) {
     glBindVertexArray(vao);
 
-//    for (int i = 0; i < 1; ++i) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(vec2), pos.data(), GL_STREAM_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*) (0));
 
-//    for (int i = 0; i < 1; ++i) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(std::uint32_t), indices.data(),
                  GL_STREAM_DRAW);
@@ -414,7 +415,9 @@ void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,
                               bool& update_pos,
                               bool& update_quality,
                               bool& scale_up,
-                              bool& hold_b) {
+                              bool& hold_b,
+                              bool& pause,
+                              int& cur_func) {
     if (button_down[SDLK_0]) {
         config.W(1, dt);
         config.H(1, dt);
@@ -437,26 +440,26 @@ void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,
         update_quality = true;
     }
     if (button_down[SDLK_3]) {
-        config.W(500, dt);
-        config.H(500, dt);
+        config.W(300, dt);
+        config.H(300, dt);
 
         update_pos = true;
         update_quality = true;
     }
-    if (button_down[SDLK_4]) {
-        config.W(1000, dt);
-        config.H(1000, dt);
-
-        update_pos = true;
-        update_quality = true;
-    }
-    if (button_down[SDLK_5]) {
-        config.W(2000, dt);
-        config.H(2000, dt);
-
-        update_pos = true;
-        update_quality = true;
-    }
+//    if (button_down[SDLK_4]) {
+//        config.W(1000, dt);
+//        config.H(1000, dt);
+//
+//        update_pos = true;
+//        update_quality = true;
+//    }
+//    if (button_down[SDLK_5]) {
+//        config.W(2000, dt);
+//        config.H(2000, dt);
+//
+//        update_pos = true;
+//        update_quality = true;
+//    }
 
     if (button_down[SDLK_b] && !hold_b) {
         hold_b = true;
@@ -465,6 +468,11 @@ void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,
         update_quality = true;
     } else if (!button_down[SDLK_b]) {
         hold_b = false;
+    }
+    if (button_down[SDLK_p] && !pause) {
+        pause = true;
+    } else if (!button_down[SDLK_p]) {
+        pause = false;
     }
 
     if (button_down[SDLK_EQUALS]) {
@@ -480,5 +488,34 @@ void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,
 
         update_pos = true;
         update_quality = true;
+    }
+
+    if (button_down[SDLK_LEFT]) {
+        config.isolines(config.isolines() - 1, dt);
+
+        update_pos = true;
+        update_quality = true;
+    }
+    if (button_down[SDLK_RIGHT]) {
+        config.isolines(config.isolines() + 1, dt);
+
+        update_pos = true;
+        update_quality = true;
+    }
+    if (button_down[SDLK_o]) {
+        config.isolines(2, dt);
+
+        update_pos = true;
+        update_quality = true;
+    }
+
+    if (button_down[SDLK_z]) {
+        cur_func = 0;
+    }
+    if (button_down[SDLK_x]) {
+        cur_func = 1;
+    }
+    if (button_down[SDLK_c]) {
+        cur_func = 2;
     }
 }
