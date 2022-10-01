@@ -150,7 +150,7 @@ std::uint32_t iso_index(int i, int j, int edge) {
     if (i == config.W() - 1 && edge == 1) {
         return ((i + 1) * config.H()) * 3 + (i + 1) + j;
     }
-    switch(edge) {
+    switch (edge) {
         case 0:
             return (i * config.H() + j) * 3 + i;
         case 1:
@@ -209,30 +209,47 @@ unsigned char variation(float val1, float val2, float val3, float iso_val) {
     return res;
 }
 
-vec2 interpolate(vec2 pos1, float val1, vec2 pos2, float val2, float iso_val) {
-    // returns point between pos1 and pos2 that corresponds to iso_val,
+typedef struct point {
+    float val;
+    vec2 pos;
+} point;
+
+vec2 interpolate(point v1, point v2, float iso_val) {
+    // returns point between v1 and v2 that corresponds to iso_val,
     // if possible. Undefined otherwise
-    float q = (iso_val - val1) / (val2 - val1);
+    if (v2.pos.x < v1.pos.x || v2.pos.y < v1.pos.y) {
+//        std::swap(v2.pos.x, v1.pos.x);
+//        std::swap(v2.pos.y, v1.pos.y);
+//        std::swap(v2.val, v1.val);
+        std::swap(v2, v1);
+    }
+    float q = (iso_val - v1.val) / (v2.val - v1.val);
     if (q < 0 or q > 1)
         return {0, 0};
-    return {pos2.x * q + pos1.x * (1 - q), pos2.y * q + pos1.y * (1 - q)};
+    return {v2.pos.x * q + v1.pos.x * (1 - q), v2.pos.y * q + v1.pos.y * (1 - q)};
 }
 
-void parse_configuration(std::vector<std::uint32_t>& indices, int i, int j, const int edge, unsigned char configuration,
-                         bool top) {
+void parse_configuration(std::vector<std::uint32_t>& indices, std::vector<vec2>& pos, int i, int j, const int edge,
+                         unsigned char configuration,
+                         bool top, const point v[],
+                         float iso_value) {
     switch (configuration) {
         case 1:
         case 6:
             if (top) {
+                pos[iso_index(i, j, edge)] = interpolate(v[0], v[1], iso_value);
                 indices.push_back(iso_index(i, j, edge));
             }
+            pos[iso_index(i, j, edge + 2)] = interpolate(v[0], v[2], iso_value);
             indices.push_back(iso_index(i, j, edge + 2));
             break;
         case 2:
         case 5:
             if (top) {
+                pos[iso_index(i, j, edge)] = interpolate(v[0], v[1], iso_value);
                 indices.push_back(iso_index(i, j, edge));
             }
+            pos[iso_index(i, j, edge + 1)] = interpolate(v[1], v[2], iso_value);
             indices.push_back(iso_index(i, j, edge + 1));
             indices.push_back(config.PRIMITIVE_RESTART_INDEX);
             break;
@@ -240,7 +257,9 @@ void parse_configuration(std::vector<std::uint32_t>& indices, int i, int j, cons
         case 4:
             if (!indices.empty() && indices.back() != config.PRIMITIVE_RESTART_INDEX)
                 indices.push_back(config.PRIMITIVE_RESTART_INDEX);
+            pos[iso_index(i, j, edge + 1)] = interpolate(v[1], v[2], iso_value);
             indices.push_back(iso_index(i, j, edge + 1));
+            pos[iso_index(i, j, edge + 2)] = interpolate(v[0], v[2], iso_value);
             indices.push_back(iso_index(i, j, edge + 2));
             break;
         case 0:
@@ -301,59 +320,28 @@ void calculate_isolines(std::vector<std::vector<vec2>>& pos,
                 //  0---1
                 //  | \ |
                 //  3---2
-                const float v_val[4] = {vals[grid_index(i, j)],
-                                        vals[grid_index(i + 1, j)],
-                                        vals[grid_index(i + 1, j + 1)],
-                                        vals[grid_index(i, j + 1)]};
 
-                const vec2 v_pos[4] = {{1.0f * limit * i / config.W() + dx,
-                                               1.0f * limit * j / config.H() + dy},
-                                       {1.0f * limit * (i + 1) / config.W() + dx,
-                                               1.0f * limit * j / config.H() + dy},
-                                       {1.0f * limit * (i + 1) / config.W() + dx,
-                                               1.0f * limit * (j + 1) / config.H() + dy},
-                                       {1.0f * limit * i / config.W() + dx,
-                                               1.0f * limit * (j + 1) / config.H() + dy}};
-                // TODO: ALL OF IT!
-                pos[cur_isoline][iso_index(i, j, 0)] = interpolate(v_pos[0], v_val[0], v_pos[1], v_val[1], iso_value);
-                pos[cur_isoline][iso_index(i, j, 1)] = interpolate(v_pos[1], v_val[1], v_pos[2], v_val[2], iso_value);
-                pos[cur_isoline][iso_index(i, j, 2)] = interpolate(v_pos[0], v_val[0], v_pos[2], v_val[2], iso_value);
-                pos[cur_isoline][iso_index(i, j, 3)] = interpolate(v_pos[0], v_val[0], v_pos[3], v_val[3], iso_value);
-                pos[cur_isoline][iso_index(i, j, 4)] = interpolate(v_pos[3], v_val[3], v_pos[2], v_val[2], iso_value);
+                // first triangle
+                const point v1[3] = {{vals[grid_index(i, j)],     {1.0f * limit * i / config.W() + dx,
+                                                                   1.0f * limit * j / config.H() + dy}},
+                                     {vals[grid_index(i + 1, j)], {1.0f * limit * (i + 1) / config.W() + dx,
+                                                                   1.0f * limit * j / config.H() + dy}},
+                                     {vals[grid_index(i + 1, j + 1)],
+                                                                  {1.0f * limit * (i + 1) / config.W() + dx,
+                                                                   1.0f * limit * (j + 1) / config.H() + dy}}};
 
+                // second triangle
+                const point v2[3] = {v1[2],
+                                     v1[0],
+                                     {vals[grid_index(i, j + 1)],
+                                            {1.0f * limit * i / config.W() + dx,
+                                             1.0f * limit * (j + 1) / config.H() + dy}}};
 
-                unsigned char var1 = variation(v_val[0], v_val[1], v_val[2], iso_value);
-//                std::uint32_t ind_index = indices[cur_isoline].size();
-//                if (i == 0) {
-//                    std::cout << "Cfg " << i << ", " << j << "   " << (int) var1
-//                              << " + " << (int) variation(v_val[2], v_val[0], v_val[3], iso_value) << std::endl;
-//                    for (int k = 0; k < 5; ++k) {
-//                        std::cout << k << ": (" << pos[cur_isoline][iso_index(i, j, k)].x << ", "
-//                                  << pos[cur_isoline][iso_index(i, j, k)].y << ") "
-//                                  << std::endl;
-//                    }
-//                    for (int k = 0; k < 4; ++k) {
-//                        std::cout << k << ": f(" << v_pos[k].x << ", " << v_pos[k].y << ") = " << v_val[k]
-//                                  << std::endl;
-//                    }
-//                }
+                unsigned char var1 = variation(v1[0].val, v1[1].val, v1[2].val, iso_value);
+                unsigned char var2 = variation(v2[0].val, v2[1].val, v2[2].val, iso_value);
 
-                parse_configuration(indices[cur_isoline], i, j, 0, var1, (j == 0));
-                unsigned char var2 = variation(v_val[2], v_val[0], v_val[3], iso_value);
-                parse_configuration(indices[cur_isoline], i, j, 2, var2, false);
-//                if (i == 0) {
-//                    std::cout << "Indices:" << std::endl;
-//                    for (ind_index; ind_index < indices[cur_isoline].size(); ++ind_index) {
-//                        if (indices[cur_isoline][ind_index] == config.PRIMITIVE_RESTART_INDEX) {
-//                            std::cout << indices[cur_isoline][ind_index] << std::endl;
-//                            continue;
-//                        }
-//                        std::cout << indices[cur_isoline][ind_index] << ":";
-////                        std::cout << std::endl;
-//                        std::cout << " (" << pos[cur_isoline][indices[cur_isoline][ind_index]].x << ", "
-//                                  << pos[cur_isoline][indices[cur_isoline][ind_index]].y << ")" << std::endl;
-//                    }
-//                }
+                parse_configuration(indices[cur_isoline], pos[cur_isoline], i, j, 0, var1, (j == 0), v1, iso_value);
+                parse_configuration(indices[cur_isoline], pos[cur_isoline], i, j, 2, var2, false, v2, iso_value);
             }
             indices[cur_isoline].push_back(config.PRIMITIVE_RESTART_INDEX);
         }
@@ -517,5 +505,8 @@ void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,
     }
     if (button_down[SDLK_c]) {
         cur_func = 2;
+    }
+    if (button_down[SDLK_v]) {
+        cur_func = 3;
     }
 }

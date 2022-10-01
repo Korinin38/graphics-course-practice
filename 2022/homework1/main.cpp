@@ -36,11 +36,19 @@ float sub_squares(float x, float y, float t) {
 }
 
 float something(float x, float y, float t) {
-    return cos(x / 2) * cos(cos(x / 2) / 2) - sin(y)  * sin(y)  * sin(y) + x * t * t + sin(t) * 3000;
+    return x * cos(x / 2) / 2 - y * y * sin(y) + x * t * t + sin(t) * 3000;
 }
 
 float circles(float x, float y, float t) {
-    return config.MAX_VALUE / 2 - fmod(x * x + y * y + config.MAX_VALUE / 2 * cos(t * 0.33),  config.MAX_VALUE * sin(t));
+    x = x * 100 / (config.X1 - config.X0);
+    y = y * 100 / (config.Y1 - config.Y0);
+    return config.MAX_VALUE * (1 + cos(t)) -abs(sin(x) * cos(y) * exp(abs(1 - (sqrt(x * x + y * y)/std::numbers::pi))));
+}
+
+float metaballs(float x, float y, float t) {
+    float x0 = fmod(t * 4, (config.X1 - config.X0)) + config.X0;
+    float y0 = x0 + sin(t * 4) * 4;
+    return config.MAX_VALUE * 100 / ((x0 - x) * (x0 - x) + (y0 - y)*(y0 - y));
 }
 
 int main() try {
@@ -109,8 +117,7 @@ int main() try {
     GLint view_location_iso = glGetUniformLocation(iso_program, "view");
     GLint value_limit = glGetUniformLocation(grid_program, "max_value");
 
-    const int FUNCS = 3;
-    float (* funcs[])(float, float, float) = {sub_squares, something, circles};
+    float (* funcs[])(float, float, float) = {sub_squares, something,metaballs, circles};
 
     std::vector<float> values((config.W() + 1) * (config.H() + 1));
     std::vector<vec2> grid_pos((config.W() + 1) * (config.H() + 1));
@@ -153,7 +160,7 @@ int main() try {
     bool update_pos = true;
     bool update_quality = true;
     bool hold_b = false;
-    bool draw_iso = false;
+    bool draw_iso = true;
     bool pause = false;
     int cur_func = 0;
 
