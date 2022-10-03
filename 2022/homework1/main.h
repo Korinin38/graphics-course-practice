@@ -77,7 +77,6 @@ struct vec2 {
 };
 
 class Configurer {
-    //
     unsigned int _isolines = 3;
     unsigned int _grid_x = 30;
     unsigned int _grid_y = 30;
@@ -93,7 +92,7 @@ public:
     const float Y1 = 100;
     const float MAX_VALUE = 10000;
     const unsigned int MAX_ISOLINES = 30;
-    const unsigned int MAX_GRID = 300;
+    const unsigned int MAX_GRID = 1000;
 
     Configurer(Configurer const&) = delete;
 
@@ -217,12 +216,7 @@ typedef struct point {
 vec2 interpolate(point v1, point v2, float iso_val) {
     // returns point between v1 and v2 that corresponds to iso_val,
     // if possible. Undefined otherwise
-    if (v2.pos.x < v1.pos.x || v2.pos.y < v1.pos.y) {
-//        std::swap(v2.pos.x, v1.pos.x);
-//        std::swap(v2.pos.y, v1.pos.y);
-//        std::swap(v2.val, v1.val);
-        std::swap(v2, v1);
-    }
+    if (v2.pos.x < v1.pos.x || v2.pos.y < v1.pos.y)  std::swap(v2, v1);
     float q = (iso_val - v1.val) / (v2.val - v1.val);
     if (q < 0 or q > 1)
         return {0, 0};
@@ -434,20 +428,20 @@ void primitive_button_handler(std::map<SDL_Keycode, bool>& button_down,
         update_pos = true;
         update_quality = true;
     }
-//    if (button_down[SDLK_4]) {
-//        config.W(1000, dt);
-//        config.H(1000, dt);
-//
-//        update_pos = true;
-//        update_quality = true;
-//    }
-//    if (button_down[SDLK_5]) {
-//        config.W(2000, dt);
-//        config.H(2000, dt);
-//
-//        update_pos = true;
-//        update_quality = true;
-//    }
+    if (button_down[SDLK_4]) {
+        config.W(500, dt);
+        config.H(500, dt);
+
+        update_pos = true;
+        update_quality = true;
+    }
+    if (button_down[SDLK_5]) {
+        config.W(1000, dt);
+        config.H(1000, dt);
+
+        update_pos = true;
+        update_quality = true;
+    }
 
     if (button_down[SDLK_b] && !hold_b) {
         hold_b = true;

@@ -87,7 +87,6 @@ int main() try {
         throw std::runtime_error("OpenGL 3.3 is not supported");
 
     glClearColor(1.f, 1.f, 1.f, 0.f);
-//    glClearColor(.2f, .3f, 0.8f, 0.f);
 
     std::string iso_v_shader_source = readFile("shaders/iso.vert");
     std::string iso_frag_shader_source = readFile("shaders/iso.frag");
@@ -129,14 +128,6 @@ int main() try {
     calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
     place_grid(grid_pos, width, height);
     set_grid_indices(indices);
-
-    std::cout << "Indices:" << std::endl;
-    for (int i = 0; i < iso_indices[1].size(); ++i) {
-        std::cout << iso_indices[1][i] << " ";
-        if (iso_indices[1][i] == config.PRIMITIVE_RESTART_INDEX) {
-            std::cout << std::endl;
-        }
-    }
 
     GLuint grid_vao, grid_pos_vbo, grid_val_vbo, grid_ebo;
     glGenVertexArrays(1, &grid_vao);
@@ -195,8 +186,8 @@ int main() try {
                     button_down[event.key.keysym.sym] = false;
                     break;
             }
-//        primitive_button_handler(button_down, dt, update_pos, update_quality, scale_up, hold_b, pause, cur_func);
-        primitive_button_handler(button_down, dt, update_pos, update_quality, draw_iso, hold_b, pause, cur_func);
+        primitive_button_handler(button_down, dt, update_pos, update_quality, scale_up, hold_b, pause, cur_func);
+//        primitive_button_handler(button_down, dt, update_pos, update_quality, draw_iso, hold_b, pause, cur_func);
 
         if (!running)
             break;
@@ -205,7 +196,6 @@ int main() try {
         if (!pause)
             time += dt;
 
-//        calculate_grid(values, time, sub_squares);
         calculate_grid(values, time, funcs[cur_func]);
         calculate_isolines(isolines, iso_indices, values, width, height, scale_up);
         glBindBuffer(GL_ARRAY_BUFFER, grid_val_vbo);
