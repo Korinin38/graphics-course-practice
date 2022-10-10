@@ -243,7 +243,7 @@ int main() try
             std::cout << "UNSUPPORTED" << std::endl;
         throw std::runtime_error("Framebuffer incomplete");
     }
-
+    glm::vec2 centers[] = {{-0.5, -0.5}, {-0.5, 0.5}, {0.5, 0.5}, {0.5, -0.5}};
 
     GLuint model_location = glGetUniformLocation(dragon_program, "model");
     GLuint view_location = glGetUniformLocation(dragon_program, "view");
@@ -323,27 +323,29 @@ int main() try
             button_down[event.key.keysym.sym] = false;
             break;
         }
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glViewport(0, 0, width, height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        for (int i = 0; i < 4; ++i)
-        {
-            if (!running)
-                break;
+        if (!running)
+            break;
 
-            auto now = std::chrono::high_resolution_clock::now();
-            float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
-            last_frame_start = now;
-            time += dt;
+        auto now = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+        last_frame_start = now;
+        time += dt;
 
-            if (button_down[SDLK_UP])
-                camera_distance -= 1.f * dt;
-            if (button_down[SDLK_DOWN])
-                camera_distance += 1.f * dt;
+        if (button_down[SDLK_UP])
+            camera_distance -= 1.f * dt;
+        if (button_down[SDLK_DOWN])
+            camera_distance += 1.f * dt;
 
-            if (button_down[SDLK_LEFT])
-                model_angle -= 2.f * dt;
-            if (button_down[SDLK_RIGHT])
-                model_angle += 2.f * dt;
+        if (button_down[SDLK_LEFT])
+            model_angle -= 2.f * dt;
+        if (button_down[SDLK_RIGHT])
+            model_angle += 2.f * dt;
 
+        for (int i = 0; i < 4; ++i) {
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
             glViewport(0, 0, width / 2, height / 2);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -390,24 +392,12 @@ int main() try
 
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
             glViewport(0, 0, width, height);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             glUseProgram(rectangle_program);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, fbo_texture);
 
-            if (i == 0) {
-                glUniform2f(center_location, -0.5f, -0.5f);
-            }
-            else if (i == 1) {
-                glUniform2f(center_location, -0.5f, 0.5f);
-            }
-            else if (i == 2) {
-                glUniform2f(center_location, 0.5f, 0.5f);
-            }
-            else if (i == 3) {
-                glUniform2f(center_location, 0.5f, -0.5f);
-            }
+            glUniform2f(center_location, centers[i].x, centers[i].y);
 
             glUniform2f(size_location, 0.5f, 0.5f);
             glUniform1i(render_result_location, 0);
