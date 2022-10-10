@@ -121,6 +121,8 @@ const char rectangle_fragment_shader_source[] =
 R"(#version 330 core
 
 uniform sampler2D render_result;
+uniform int mode;
+uniform float time;
 
 in vec2 texcoord;
 
@@ -130,6 +132,25 @@ void main()
 {
 //    out_color = vec4(texcoord, 0.0, 1.0);
     out_color = texture(render_result, texcoord);
+    if (mode == 1)
+        out_color = floor(out_color * 4.0) / 3.0;
+    if (mode == 2)
+        out_color = texture(render_result, texcoord + vec2(sin(texcoord.y * 50.0 + time) * 0.01, 0.0));
+    if (mode == 3)
+    {
+        vec4 sum = vec4(0.0);
+        float sum_w = 0.0;
+        const int N = 5;
+        float radius = 3.0;
+        for (int x = -N; x <= N; ++x) {
+            for (int y = -N; y <= N; ++y) {
+                float c = exp(-float(x*x + y*y) / (radius*radius));
+                sum += c * texture(render_result, texcoord + vec2(x,y) / vec2(textureSize(render_result, 0)));
+                sum_w += c;
+            }
+        }
+        out_color = sum / sum_w;
+    }
 }
 )";
 
@@ -280,6 +301,8 @@ int main() try
     GLuint center_location = glGetUniformLocation(rectangle_program, "center");
     GLuint size_location = glGetUniformLocation(rectangle_program, "size");
     GLuint render_result_location = glGetUniformLocation(rectangle_program, "render_result");
+    GLuint mode_location = glGetUniformLocation(rectangle_program, "mode");
+    GLuint time_location = glGetUniformLocation(rectangle_program, "time");
 
     GLuint rectangle_vao;
     glGenVertexArrays(1, &rectangle_vao);
@@ -294,6 +317,7 @@ int main() try
     float camera_distance = 0.5f;
     float model_angle = glm::pi<float>() / 2.f;
     float model_scale = 1.f;
+    float view_scale = 2.5f;
 
     bool running = true;
     while (running)
@@ -364,19 +388,22 @@ int main() try
             glm::mat4 projection;
             if (i == 0) {
                 glClearColor(0.0f, 0.3f, 1.f, 0.f);
-                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::translate(view, {0.f, -0.1f, -camera_distance});
+                view = glm::scale(view, glm::vec3(view_scale));
                 projection = glm::ortho(-(1.f * width) / height, (1.f * width) / height, -1.f, 1.f, -3.f, 3.f);
             }
             else if (i == 1) {
                 glClearColor(0.6f, 0.3f, 0.3f, 0.f);
-                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::translate(view, {0.f, -0.1f, -camera_distance});
                 view = glm::rotate(view, glm::pi<float>() / 2, {0.f, 1.f, 0.f});
+                view = glm::scale(view, glm::vec3(view_scale));
                 projection = glm::ortho(-(1.f * width) / height, (1.f * width) / height, -1.f, 1.f, -3.f, 3.f);
             }
             else if (i == 2) {
                 glClearColor(1.f, 1.f, 0.2f, 0.f);
-                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::translate(view, {0.f, -0.1f, -camera_distance});
                 view = glm::rotate(view, glm::pi<float>() / 2, {1.f, 0.f, 0.f});
+                view = glm::scale(view, glm::vec3(view_scale));
                 projection = glm::ortho(-(1.f * width) / height, (1.f * width) / height, -1.f, 1.f, -3.f, 3.f);
             }
             else if (i == 3) {
@@ -410,6 +437,8 @@ int main() try
 
             glUniform2f(size_location, 0.5f, 0.5f);
             glUniform1i(render_result_location, 0);
+            glUniform1i(mode_location, i);
+            glUniform1f(time_location, time);
             glBindVertexArray(rectangle_vao);
             glDrawArrays(GL_TRIANGLES, 0, 6);
         }
