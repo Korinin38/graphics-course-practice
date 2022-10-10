@@ -310,7 +310,7 @@ int main() try
                 height = event.window.data2;
                 glViewport(0, 0, width, height);
                 glBindTexture(GL_TEXTURE_2D, fbo_texture);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width / 2, height / 2, 0, GL_RGBA8, GL_UNSIGNED_BYTE, nullptr);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width / 2, height / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
                 glBindRenderbuffer(GL_RENDERBUFFER, fbo_render);
                 glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width / 2, height / 2);
                 break;
@@ -352,19 +352,6 @@ int main() try
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_CULL_FACE);
 
-            if (i == 0) {
-                glClearColor(0.0f, 0.3f, 1.f, 0.f);
-            }
-            else if (i == 1) {
-                glClearColor(0.6f, 0.3f, 0.3f, 0.f);
-            }
-            else if (i == 2) {
-                glClearColor(1.f, 1.f, 0.2f, 0.f);
-            }
-            else if (i == 3) {
-                glClearColor(0.f, 1.f, 0.2f, 0.f);
-            }
-
             float near = 0.1f;
             float far = 100.f;
 
@@ -373,10 +360,32 @@ int main() try
             model = glm::scale(model, glm::vec3(model_scale));
 
             glm::mat4 view(1.f);
-            view = glm::translate(view, {0.f, 0.f, -camera_distance});
-            view = glm::rotate(view, view_angle, {1.f, 0.f, 0.f});
 
-            glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
+            glm::mat4 projection;
+            if (i == 0) {
+                glClearColor(0.0f, 0.3f, 1.f, 0.f);
+                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                projection = glm::ortho(-(1.f * width) / height, (1.f * width) / height, -1.f, 1.f, -3.f, 3.f);
+            }
+            else if (i == 1) {
+                glClearColor(0.6f, 0.3f, 0.3f, 0.f);
+                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::rotate(view, glm::pi<float>() / 2, {0.f, 1.f, 0.f});
+                projection = glm::ortho(-(1.f * width) / height, (1.f * width) / height, -1.f, 1.f, -3.f, 3.f);
+            }
+            else if (i == 2) {
+                glClearColor(1.f, 1.f, 0.2f, 0.f);
+                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::rotate(view, glm::pi<float>() / 2, {1.f, 0.f, 0.f});
+                projection = glm::ortho(-(1.f * width) / height, (1.f * width) / height, -1.f, 1.f, -3.f, 3.f);
+            }
+            else if (i == 3) {
+                glClearColor(0.f, 1.f, 0.2f, 0.f);
+                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::rotate(view, view_angle, {1.f, 0.f, 0.f});
+                projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
+            }
+
 
             glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
