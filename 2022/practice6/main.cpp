@@ -169,6 +169,9 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader)
     return result;
 }
 
+//void create_framebuffer(GLuint& fbo, GLuint& fbo_render, GLuint& fbo_texture) {
+//}
+
 int main() try
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -210,6 +213,37 @@ int main() try
     auto dragon_vertex_shader = create_shader(GL_VERTEX_SHADER, dragon_vertex_shader_source);
     auto dragon_fragment_shader = create_shader(GL_FRAGMENT_SHADER, dragon_fragment_shader_source);
     auto dragon_program = create_program(dragon_vertex_shader, dragon_fragment_shader);
+
+    // Frame buffer
+    GLuint fbo, fbo_render, fbo_texture;
+    glGenTextures(1, &fbo_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, fbo_texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width / 2, height / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    glGenRenderbuffers(1, &fbo_render);
+    glBindRenderbuffer(GL_RENDERBUFFER, fbo_render);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width / 2, height / 2);
+
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+    glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fbo_texture, 0);
+    glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, fbo_render);
+
+    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        GLenum error = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        if (error == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT)
+            std::cout << "INCOMPLETE ATTACHMENT" << std::endl;
+        if (error == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT)
+            std::cout << "INCOMPLETE MISSING ATTACHMENT" << std::endl;
+        if (error == GL_FRAMEBUFFER_UNSUPPORTED)
+            std::cout << "UNSUPPORTED" << std::endl;
+        throw std::runtime_error("Framebuffer incomplete");
+    }
+
 
     GLuint model_location = glGetUniformLocation(dragon_program, "model");
     GLuint view_location = glGetUniformLocation(dragon_program, "view");
@@ -273,6 +307,10 @@ int main() try
                 width = event.window.data1;
                 height = event.window.data2;
                 glViewport(0, 0, width, height);
+                glBindTexture(GL_TEXTURE_2D, fbo_texture);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width / 2, height / 2, 0, GL_RGBA8, GL_UNSIGNED_BYTE, nullptr);
+                glBindRenderbuffer(GL_RENDERBUFFER, fbo_render);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width / 2, height / 2);
                 break;
             }
             break;

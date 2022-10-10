@@ -6,3 +6,4 @@
 */cmake-build-*
 *.webm
 output.mp4
+lectures*
