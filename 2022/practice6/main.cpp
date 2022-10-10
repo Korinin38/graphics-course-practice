@@ -120,13 +120,16 @@ void main()
 const char rectangle_fragment_shader_source[] =
 R"(#version 330 core
 
+uniform sampler2D render_result;
+
 in vec2 texcoord;
 
 layout (location = 0) out vec4 out_color;
 
 void main()
 {
-    out_color = vec4(texcoord, 0.0, 1.0);
+//    out_color = vec4(texcoord, 0.0, 1.0);
+    out_color = texture(render_result, texcoord);
 }
 )";
 
@@ -168,9 +171,6 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader)
 
     return result;
 }
-
-//void create_framebuffer(GLuint& fbo, GLuint& fbo_render, GLuint& fbo_texture) {
-//}
 
 int main() try
 {
@@ -272,12 +272,14 @@ int main() try
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(12));
 
+
     auto rectangle_vertex_shader = create_shader(GL_VERTEX_SHADER, rectangle_vertex_shader_source);
     auto rectangle_fragment_shader = create_shader(GL_FRAGMENT_SHADER, rectangle_fragment_shader_source);
     auto rectangle_program = create_program(rectangle_vertex_shader, rectangle_fragment_shader);
 
     GLuint center_location = glGetUniformLocation(rectangle_program, "center");
     GLuint size_location = glGetUniformLocation(rectangle_program, "size");
+    GLuint render_result_location = glGetUniformLocation(rectangle_program, "render_result");
 
     GLuint rectangle_vao;
     glGenVertexArrays(1, &rectangle_vao);
@@ -322,58 +324,96 @@ int main() try
             break;
         }
 
-        if (!running)
-            break;
+        for (int i = 0; i < 4; ++i)
+        {
+            if (!running)
+                break;
 
-        auto now = std::chrono::high_resolution_clock::now();
-        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
-        last_frame_start = now;
-        time += dt;
+            auto now = std::chrono::high_resolution_clock::now();
+            float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+            last_frame_start = now;
+            time += dt;
 
-        if (button_down[SDLK_UP])
-            camera_distance -= 1.f * dt;
-        if (button_down[SDLK_DOWN])
-            camera_distance += 1.f * dt;
+            if (button_down[SDLK_UP])
+                camera_distance -= 1.f * dt;
+            if (button_down[SDLK_DOWN])
+                camera_distance += 1.f * dt;
 
-        if (button_down[SDLK_LEFT])
-            model_angle -= 2.f * dt;
-        if (button_down[SDLK_RIGHT])
-            model_angle += 2.f * dt;
+            if (button_down[SDLK_LEFT])
+                model_angle -= 2.f * dt;
+            if (button_down[SDLK_RIGHT])
+                model_angle += 2.f * dt;
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+            glViewport(0, 0, width / 2, height / 2);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_CULL_FACE);
 
-        float near = 0.1f;
-        float far = 100.f;
+            if (i == 0) {
+                glClearColor(0.0f, 0.3f, 1.f, 0.f);
+            }
+            else if (i == 1) {
+                glClearColor(0.6f, 0.3f, 0.3f, 0.f);
+            }
+            else if (i == 2) {
+                glClearColor(1.f, 1.f, 0.2f, 0.f);
+            }
+            else if (i == 3) {
+                glClearColor(0.f, 1.f, 0.2f, 0.f);
+            }
 
-        glm::mat4 model(1.f);
-        model = glm::rotate(model, model_angle, {0.f, 1.f, 0.f});
-        model = glm::scale(model, glm::vec3(model_scale));
+            float near = 0.1f;
+            float far = 100.f;
 
-        glm::mat4 view(1.f);
-        view = glm::translate(view, {0.f, 0.f, -camera_distance});
-        view = glm::rotate(view, view_angle, {1.f, 0.f, 0.f});
+            glm::mat4 model(1.f);
+            model = glm::rotate(model, model_angle, {0.f, 1.f, 0.f});
+            model = glm::scale(model, glm::vec3(model_scale));
 
-        glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
+            glm::mat4 view(1.f);
+            view = glm::translate(view, {0.f, 0.f, -camera_distance});
+            view = glm::rotate(view, view_angle, {1.f, 0.f, 0.f});
 
-        glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+            glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
 
-        glUseProgram(dragon_program);
-        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+            glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-        glUniform3fv(camera_position_location, 1, (float*)(&camera_position));
+            glUseProgram(dragon_program);
+            glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float*>(&model));
+            glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float*>(&view));
+            glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float*>(&projection));
 
-        glBindVertexArray(dragon_vao);
-        glDrawElements(GL_TRIANGLES, dragon.indices.size(), GL_UNSIGNED_INT, nullptr);
+            glUniform3fv(camera_position_location, 1, (float*) (&camera_position));
 
-        glUseProgram(rectangle_program);
-        glUniform2f(center_location, -0.5f, -0.5f);
-        glUniform2f(size_location, 0.5f, 0.5f);
-        glBindVertexArray(rectangle_vao);
-//        glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindVertexArray(dragon_vao);
+            glDrawElements(GL_TRIANGLES, dragon.indices.size(), GL_UNSIGNED_INT, nullptr);
+
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glViewport(0, 0, width, height);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            glUseProgram(rectangle_program);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, fbo_texture);
+
+            if (i == 0) {
+                glUniform2f(center_location, -0.5f, -0.5f);
+            }
+            else if (i == 1) {
+                glUniform2f(center_location, -0.5f, 0.5f);
+            }
+            else if (i == 2) {
+                glUniform2f(center_location, 0.5f, 0.5f);
+            }
+            else if (i == 3) {
+                glUniform2f(center_location, 0.5f, -0.5f);
+            }
+
+            glUniform2f(size_location, 0.5f, 0.5f);
+            glUniform1i(render_result_location, 0);
+            glBindVertexArray(rectangle_vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
 
         SDL_GL_SwapWindow(window);
     }
