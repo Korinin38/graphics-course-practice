@@ -38,31 +38,39 @@ R"(#version 330 core
 
 uniform mat4 transform;
 uniform mat4 projection;
+uniform float time;
 
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
+layout (location = 2) in vec2 in_texcoord;
 
 out vec3 normal;
+out vec2 texcoord;
 
 void main()
 {
     gl_Position = projection * transform * vec4(in_position, 1.0);
     normal = mat3(transform) * in_normal;
+    texcoord = vec2(in_texcoord.x + time, in_texcoord.y);
 }
 )";
 
 const char fragment_shader_source[] =
 R"(#version 330 core
 
+uniform sampler2D col;
+
 in vec3 normal;
+in vec2 texcoord;
 
 layout (location = 0) out vec4 out_color;
 
 void main()
 {
     float lightness = 0.5 + 0.5 * dot(normalize(normal), normalize(vec3(1.0, 2.0, 3.0)));
-    vec3 albedo = vec3(1.0);
-    out_color = vec4(lightness * albedo, 1.0);
+//    vec3 albedo = vec3(texcoord, 0.8);
+    vec4 albedo = texture(col, texcoord);
+    out_color = vec4(lightness * albedo);
 }
 )";
 
@@ -104,6 +112,23 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader)
 
     return result;
 }
+
+typedef struct texture_t {
+    int size;
+    int parts;
+    std::vector<uint32_t > pixels;
+
+    explicit texture_t(int _size) {
+        size = _size;
+        parts = size;
+        pixels.resize(size * size);
+        for (int i = 0; i < size; ++i) {
+            for (int j = 0; j < size; ++j) {
+                pixels[i * size + j] = ((i / (size / parts)) % 2) == ((j / (size / parts)) % 2) ? 0xFF000000u : 0xFFFFFFFFu;
+            }
+        }
+    }
+} texture_t;
 
 int main() try
 {
@@ -149,12 +174,70 @@ int main() try
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
 
+//    glEnable(GL_DEPTH_TEST);
+//    glEnable(GL_CULL_FACE);
+
     GLuint transform_location = glGetUniformLocation(program, "transform");
     GLuint projection_location = glGetUniformLocation(program, "projection");
+    GLuint texture_color = glGetUniformLocation(program, "col");
+    GLuint tex_time = glGetUniformLocation(program, "time");
 
     std::string project_root = PROJECT_ROOT;
     std::string cow_texture_path = project_root + "/cow.png";
     obj_data cow = parse_obj(project_root + "/cow.obj");
+
+    GLuint points_vao;
+    glGenVertexArrays(1, &points_vao);
+    glBindVertexArray(points_vao);
+
+    GLuint points_vbo;
+    glGenBuffers(1, &points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+    glBufferData(GL_ARRAY_BUFFER, cow.vertices.size() * sizeof(obj_data::vertex), cow.vertices.data(), GL_STATIC_DRAW);
+
+    GLuint points_ebo;
+    glGenBuffers(1, &points_ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, points_ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, cow.indices.size() * sizeof(std::uint32_t), cow.indices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(12));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(24));
+
+    GLuint checkers_texture;
+    glGenTextures(1, &checkers_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, checkers_texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    texture_t checkers(512);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, checkers.size, checkers.size, 0, GL_RGBA, GL_UNSIGNED_BYTE, checkers.pixels.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA8, checkers.size / 2, checkers.size / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 std::vector<uint32_t>(checkers.size * checkers.size / 4, 0xFF0000FFu).data());
+    glTexImage2D(GL_TEXTURE_2D, 2, GL_RGBA8, checkers.size / 4, checkers.size / 4, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 std::vector<uint32_t>(checkers.size * checkers.size / 16, 0xFF00FF00u).data());
+    glTexImage2D(GL_TEXTURE_2D, 3, GL_RGBA8, checkers.size / 8, checkers.size / 8, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 std::vector<uint32_t>(checkers.size * checkers.size / 64, 0xFFFF0000u).data());
+
+    GLuint real_texture;
+    glGenTextures(1, &real_texture);
+    glActiveTexture(GL_TEXTURE0 + 1);
+    glBindTexture(GL_TEXTURE_2D, real_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+    int x, y, n;
+    unsigned char* texture_data = stbi_load(cow_texture_path.c_str(), &x, &y, &n, 4);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, x, y, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(texture_data);
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -164,6 +247,8 @@ int main() try
     float offset_z = -2.f;
 
     std::map<SDL_Keycode, bool> button_down;
+
+    int which_is_to_draw = 1;
 
     bool running = true;
     while (running)
@@ -202,6 +287,8 @@ int main() try
         if (button_down[SDLK_DOWN]) offset_z += 4.f * dt;
         if (button_down[SDLK_LEFT]) angle_y += 4.f * dt;
         if (button_down[SDLK_RIGHT]) angle_y -= 4.f * dt;
+        if (button_down[SDLK_1]) which_is_to_draw = 0;
+        if (button_down[SDLK_2]) which_is_to_draw = 1;
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
@@ -228,8 +315,12 @@ int main() try
         };
 
         glUseProgram(program);
+        glBindVertexArray(points_vao);
+        glDrawElements(GL_TRIANGLES, cow.indices.size(), GL_UNSIGNED_INT, (void*)(0));
         glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
         glUniformMatrix4fv(projection_location, 1, GL_TRUE, projection);
+        glUniform1i(texture_color, which_is_to_draw);
+        glUniform1f(tex_time, time / 8);
 
         SDL_GL_SwapWindow(window);
     }

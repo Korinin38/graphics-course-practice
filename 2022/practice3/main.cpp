@@ -13,6 +13,11 @@
 #include <chrono>
 #include <vector>
 
+const std::uint8_t RED[4] = {255, 0, 0, 255};
+const std::uint8_t GREEN[4] = {0, 255, 0, 255};
+const std::uint8_t BLUE[4] = {0, 0, 255, 255};
+const std::uint8_t BLACK[4] = {0, 0, 0, 255};
+
 std::string to_string(std::string_view str)
 {
     return std::string(str.begin(), str.end());
@@ -29,32 +34,40 @@ void glew_fail(std::string_view message, GLenum error)
 }
 
 const char vertex_shader_source[] =
-R"(#version 330 core
+        R"(#version 330 core
 
 uniform mat4 view;
 
 layout (location = 0) in vec2 in_position;
 layout (location = 1) in vec4 in_color;
+layout (location = 2) in float in_dist;
 
 out vec4 color;
+out float dist;
 
 void main()
 {
     gl_Position = view * vec4(in_position, 0.0, 1.0);
     color = in_color;
+    dist = in_dist;
 }
 )";
 
 const char fragment_shader_source[] =
-R"(#version 330 core
+        R"(#version 330 core
 
 in vec4 color;
 
 layout (location = 0) out vec4 out_color;
+in float dist;
+uniform int dash;
+uniform float time;
 
 void main()
 {
     out_color = color;
+    if (dash == 1 && mod(dist - time * 10, 40.0) < 20.0)
+        discard;
 }
 )";
 
@@ -107,6 +120,12 @@ struct vertex
 {
     vec2 position;
     std::uint8_t color[4];
+
+    void set_color(std::uint8_t const other[]) {
+        for (int i = 0; i < 4; ++i) {
+            color[i] = other[i];
+        }
+    }
 };
 
 vec2 bezier(std::vector<vertex> const & vertices, float t)
@@ -126,6 +145,27 @@ vec2 bezier(std::vector<vertex> const & vertices, float t)
     return points[0];
 }
 
+void count_bez(std::vector<vertex> &bez, const std::vector<vertex> &vertices, int quality) {
+    bez.resize((vertices.size() - 1) * quality + 1);
+
+    for (int i = 0; i < bez.size(); ++i) {
+        float t = i * 1.f / (bez.size() - 1);
+        bez[i].position = bezier(vertices, t);
+        bez[i].set_color(BLACK);
+    }
+}
+
+void count_dist(std::vector<float> &dist, const std::vector<vertex> &bez) {
+    dist.resize(bez.size());
+    dist[0] = 0;
+    for (int i = 1; i < dist.size(); ++i) {
+        dist[i] = dist[i - 1] + std::hypotf(bez[i].position.x - bez[i - 1].position.x,
+                                            bez[i].position.y - bez[i - 1].position.y);
+        std::cout << dist[i] - dist[i-1] << " ";
+    }
+    std::cout << std::endl;
+}
+
 int main() try
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -139,10 +179,10 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
     SDL_Window * window = SDL_CreateWindow("Graphics course practice 3",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        800, 600,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+                                           SDL_WINDOWPOS_CENTERED,
+                                           SDL_WINDOWPOS_CENTERED,
+                                           800, 600,
+                                           SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
 
     if (!window)
         sdl2_fail("SDL_CreateWindow: ");
@@ -168,7 +208,69 @@ int main() try
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
 
-    GLuint view_location = glGetUniformLocation(program, "view");
+
+    int quality = 4;
+
+    vertex _v[3] = {
+            {{width * 1.f, height / 2.f}, {255, 0, 0, 255}},
+            {{width / 2.f, height / 2.f}, {0, 255, 0, 255}},
+            {{width / 2.f, height * 1.f},  {0, 0, 255, 255}},
+    };
+    std::vector<vertex> v (_v, _v + 3);
+    bool draw_points = true;
+
+    GLuint points_vbo;
+    glGenBuffers(1, &points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(vertex), v.data(), GL_STATIC_DRAW);
+
+    float test;
+    glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vertex) * 2 + sizeof(float), sizeof(float), &test);
+    std::cout << test << std::endl;
+
+    GLuint points_vao;
+    glGenVertexArrays(1, &points_vao);
+    glBindVertexArray(points_vao);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
+
+    std::vector<vertex> bez((v.size() - 1) * quality + 1);
+    count_bez(bez, v, quality);
+
+    GLuint bezier_vao;
+    glGenVertexArrays(1, &bezier_vao);
+    glBindVertexArray(bezier_vao);
+
+    GLuint bezier_vbo;
+    glGenBuffers(1, &bezier_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
+    glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
+
+    std::vector<float> dist(bez.size());
+    count_dist(dist, bez);
+    GLuint dist_vbo;
+    glGenBuffers(1, &dist_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
+    glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(8));
+
+    glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, (void*)(0));
+
+    GLint view_location = glGetUniformLocation(program, "view");
+    GLint dash = glGetUniformLocation(program, "dash");
+    GLint dash_pos = glGetUniformLocation(program, "time");
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -178,41 +280,100 @@ int main() try
     while (running)
     {
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
-        {
-        case SDL_QUIT:
-            running = false;
-            break;
-        case SDL_WINDOWEVENT: switch (event.window.event)
             {
-            case SDL_WINDOWEVENT_RESIZED:
-                width = event.window.data1;
-                height = event.window.data2;
-                glViewport(0, 0, width, height);
-                break;
-            }
-            break;
-        case SDL_MOUSEBUTTONDOWN:
-            if (event.button.button == SDL_BUTTON_LEFT)
-            {
-                int mouse_x = event.button.x;
-                int mouse_y = event.button.y;
-            }
-            else if (event.button.button == SDL_BUTTON_RIGHT)
-            {
+                case SDL_QUIT:
+                    running = false;
+                    break;
+                case SDL_WINDOWEVENT: switch (event.window.event)
+                    {
+                        case SDL_WINDOWEVENT_RESIZED:
+                            width = event.window.data1;
+                            height = event.window.data2;
+                            glViewport(0, 0, width, height);
+                            break;
+                    }
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    if (event.button.button == SDL_BUTTON_LEFT)
+                    {
+                        int mouse_x = event.button.x;
+                        int mouse_y = event.button.y;
 
-            }
-            break;
-        case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_LEFT)
-            {
+                        vertex nw = {1.f * mouse_x, 1.f * (height - mouse_y)};
+                        switch (v.size() % 3) {
+                            case 0:
+                                nw.set_color(RED);
+                                break;
+                            case 1:
+                                nw.set_color(GREEN);
+                                break;
+                            case 2:
+                                nw.set_color(BLUE);
+                                break;
+                        }
+                        v.push_back(nw);
 
-            }
-            else if (event.key.keysym.sym == SDLK_RIGHT)
-            {
+                        if (v.size() >= 3) {
+                            count_bez(bez, v, quality);
+                            count_dist(dist, bez);
+                        }
 
+                        glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_DYNAMIC_DRAW);
+                        glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
+                        glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
+                        glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
+                        glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
+                    }
+                    else if (event.button.button == SDL_BUTTON_RIGHT)
+                    {
+                        if (v.size() > 0)
+                            v.pop_back();
+                        if (v.size() >= 3) {
+                            count_bez(bez, v, quality);
+                            count_dist(dist, bez);
+                        }
+
+                        glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+                        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(vertex), v.data(), GL_DYNAMIC_DRAW);
+                        glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
+                        glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
+                        glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
+                        glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
+                    }
+                    break;
+                case SDL_KEYDOWN:
+                    if (event.key.keysym.sym == SDLK_LEFT)
+                    {
+                        if (quality > 1) {
+                            quality -= 1;
+                            if (v.size() >= 3) {
+                                count_bez(bez, v, quality);
+                                count_dist(dist, bez);
+                                glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
+                                glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
+                                glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
+                                glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
+                            }
+                        }
+                    }
+                    else if (event.key.keysym.sym == SDLK_RIGHT)
+                    {
+                        quality += 1;
+                        if (v.size() >= 3) {
+                            count_bez(bez, v, quality);
+                            count_dist(dist, bez);
+                            glBindBuffer(GL_ARRAY_BUFFER, bezier_vbo);
+                            glBufferData(GL_ARRAY_BUFFER, bez.size() * sizeof(vertex), bez.data(), GL_DYNAMIC_DRAW);
+                            glBindBuffer(GL_ARRAY_BUFFER, dist_vbo);
+                            glBufferData(GL_ARRAY_BUFFER, dist.size() * sizeof(float), dist.data(), GL_DYNAMIC_DRAW);
+                        }
+                    }
+                    else if (event.key.keysym.sym == SDLK_b) {
+                        draw_points ^= true;
+                    }
+                    break;
             }
-            break;
-        }
 
         if (!running)
             break;
@@ -225,14 +386,30 @@ int main() try
         glClear(GL_COLOR_BUFFER_BIT);
 
         float view[16] =
-        {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-            0.f, 0.f, 0.f, 1.f,
-        };
+                {
+                        2.f / width, 0.f, 0.f, -1.f,
+                        0.f, 2.f / height, 0.f, -1.f,
+                        0.f, 0.f, 1.f, 0.f,
+                        0.f, 0.f, 0.f, 1.f,
+                };
 
         glUseProgram(program);
+        if (draw_points) {
+            glUniform1i(dash, 0);
+            glBindVertexArray(points_vao);
+            glPointSize(10);
+            glLineWidth(5.f);
+            glDrawArrays(GL_LINE_STRIP, 0, v.size());
+            glDrawArrays(GL_POINTS, 0, v.size());
+        }
+
+        if (v.size() >= 3) {
+            glUniform1i(dash, 1);
+            glBindVertexArray(bezier_vao);
+            glLineWidth(3.f);
+            glDrawArrays(GL_LINE_STRIP, 0, bez.size());
+        }
+        glUniform1f(dash_pos, time);
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
 
         SDL_GL_SwapWindow(window);

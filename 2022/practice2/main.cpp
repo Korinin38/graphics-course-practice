@@ -30,24 +30,45 @@ void glew_fail(std::string_view message, GLenum error)
 const char vertex_shader_source[] =
 R"(#version 330 core
 
-const vec2 VERTICES[3] = vec2[3](
+const vec2 VERTICES[8] = vec2[8](
+    vec2(0.0, 0.0),
     vec2(0.0, 1.0),
+    vec2(-sqrt(0.75), 0.5),
     vec2(-sqrt(0.75), -0.5),
-    vec2( sqrt(0.75), -0.5)
+    vec2(0.0, -1.0),
+    vec2(sqrt(0.75), -0.5),
+    vec2(sqrt(0.75), 0.5),
+    vec2(0.0, 1.0)
 );
 
-const vec3 COLORS[3] = vec3[3](
+const vec3 COLORS[8] = vec3[8](
+    vec3(0.5, 0.5, 0.5),
     vec3(1.0, 0.0, 0.0),
     vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
+    vec3(0.0, 0.0, 1.0),
+    vec3(0.0, 1.0, 1.0),
+    vec3(1.0, 0.0, 1.0),
+    vec3(1.0, 1.0, 0.0),
+    vec3(1.0, 0.0, 0.0)
 );
 
+uniform mat4 view;
+uniform mat4 transform;
 out vec3 color;
 
 void main()
 {
     vec2 position = VERTICES[gl_VertexID];
-    gl_Position = vec4(position, 0.0, 1.0);
+
+//    // cos -sin
+//    // sin cos
+//    mat2 rotateMatrix;
+//    rotateMatrix[0][0] = cos(angle);
+//    rotateMatrix[1][0] = -sin(angle);
+//    rotateMatrix[0][1] = sin(angle);
+//    rotateMatrix[1][1] = cos(angle);
+
+    gl_Position = view * transform * vec4(position, 0.0, 1.0);
     color = COLORS[gl_VertexID];
 }
 )";
@@ -127,6 +148,7 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_SetSwapInterval(0);
     if (!gl_context)
         sdl2_fail("SDL_GL_CreateContext: ");
 
@@ -142,6 +164,11 @@ int main() try
     GLuint fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
 
     GLuint program = create_program(vertex_shader, fragment_shader);
+
+    glUseProgram(program);
+    GLint transform_uniform = glGetUniformLocation(program, "transform");
+    GLint view_uniform = glGetUniformLocation(program, "view");
+    float time = 0.f;
 
     GLuint vao;
     glGenVertexArrays(1, &vao);
@@ -172,13 +199,39 @@ int main() try
 
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+//        dt = 0.016f;
+//        std::cout << dt << std::endl;
+
+        time += dt*2;
         last_frame_start = now;
 
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(program);
         glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+//        float scale = abs(sin(time) * 0.5) + 0.5;
+        float aspect_ratio = width * 1.f / height;
+        float scale = 0.3;
+        float deg60 = (float)std::numbers::pi*9/5;
+        float x = -sin(time) * (1 - scale);
+        float y = sin(time + std::numbers::pi/2) * (1 - scale);
+        float transform[16] = {
+                scale * cos(deg60 + time), scale * -sin(deg60 + time), 0, x,
+                scale * sin(deg60 + time), scale * cos(deg60 + time), 0, y,
+                0, 0, scale, 0,
+                0, 0, 0, 1,
+        };
+        float view[16] = {
+                1/aspect_ratio, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1,
+        };
+        glUniformMatrix4fv(transform_uniform, 1, GL_TRUE, transform);
+        glUniformMatrix4fv(view_uniform, 1, GL_TRUE, view);
+
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 8);
 
         SDL_GL_SwapWindow(window);
     }

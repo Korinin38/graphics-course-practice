@@ -1,5 +1,9 @@
+.gitignore
 */*/build
 */*/cmake-build-*
 */*/CMakeLists.txt.user
 .idea
 */cmake-build-*
+*.webm
+output.mp4
+lectures*
