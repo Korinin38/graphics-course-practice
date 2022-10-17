@@ -68,20 +68,57 @@ const char fragment_shader_source[] =
         R"(#version 330 core
 
 uniform vec3 camera_position;
-
 uniform vec3 albedo;
-
 uniform vec3 ambient_light;
+
+uniform vec3 sun_direction;
+uniform vec3 sun_color;
+
+uniform vec3 point_light_position;
+uniform vec3 point_light_color;
+uniform vec3 point_light_attenuation;
+
+uniform float glossiness;
+uniform float roughness;
 
 in vec3 position;
 in vec3 normal;
 
 layout (location = 0) out vec4 out_color;
 
+vec3 diffuse(vec3 direction)
+{
+    return albedo * max(0.0, dot(normal, direction));
+}
+
+vec3 specular(vec3 direction)
+{
+    vec3 reflected = 2.0 * normal * dot(normal, direction) - direction;
+    float power = 1.0 / (roughness * roughness) - 1.0;
+    return glossiness * albedo * pow(max(0.0, dot(reflected, normalize(camera_position - position))), power);
+}
+
 void main()
 {
     vec3 ambient = albedo * ambient_light;
-    vec3 color = ambient;
+
+    vec3 diffus = diffuse(sun_direction) * sun_color;
+    vec3 spec = specular(sun_direction) * sun_color;
+
+    vec3 point_light_direction = point_light_position - position;
+    float point_light_distance = length(point_light_direction);
+    point_light_direction /= point_light_distance;
+
+    vec3 att = point_light_attenuation;
+    float pld = point_light_distance;
+    float attenuation = dot(point_light_attenuation, vec3(1.0, point_light_distance, point_light_distance * point_light_distance));
+
+    diffus += diffuse(point_light_direction) * attenuation * point_light_color;
+    spec += specular(point_light_direction) * attenuation * point_light_color;
+
+
+//    vec3 color = ambient + diffus;
+    vec3 color = ambient + diffus + spec;
     out_color = vec4(color, 1.0);
 }
 )";
@@ -168,6 +205,16 @@ int main() try {
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
     GLuint albedo_location = glGetUniformLocation(program, "albedo");
     GLuint ambient_light_location = glGetUniformLocation(program, "ambient_light");
+
+    GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
+    GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
+
+    GLuint point_light_position_location = glGetUniformLocation(program, "point_light_position");
+    GLuint point_light_color_location = glGetUniformLocation(program, "point_light_color");
+    GLuint point_light_attenuation_location = glGetUniformLocation(program, "point_light_attenuation");
+
+    GLuint glossiness_location = glGetUniformLocation(program, "glossiness");
+    GLuint roughness_location = glGetUniformLocation(program, "roughness");
 
     std::string project_root = PROJECT_ROOT;
     std::string suzanne_model_path = project_root + "/suzanne.obj";
@@ -269,18 +316,38 @@ int main() try {
         view = glm::rotate(view, camera_angle, {0.f, 1.f, 0.f});
         view = glm::translate(view, {-camera_x, 0.f, 0.f});
 
+//        view = glm::translate(view, {0.f, 0.f, -5.f});
+//        view = glm::rotate(view, time * 5.F, {0.f, 1.f, 0.f});
+//        glm::vec3 point_light_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+
+
         float aspect = (float)height / (float)width;
         glm::mat4 projection = glm::perspective(glm::pi<float>() / 3.f, (width * 1.f) / height, near, far);
 
         glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+
+        float speed = 5.f;
+        glm::mat4 point_light(1.f);
+        point_light = glm::translate(point_light, {0.f, 0.f, -8.f});
+        point_light = glm::rotate(point_light, time * speed, {0.f, 1.f, 0.f});
+        glm::vec3 point_light_position = (glm::inverse(point_light) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
         glUseProgram(program);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(camera_position_location, 1, (float *) (&camera_position));
-        glUniform3f(albedo_location, 0.7f, 0.4f, 0.2f);
+        glUniform3f(albedo_location, 0.3f, 0.4f, 0.7f);
         glUniform3f(ambient_light_location, 0.2f, 0.2f, 0.2f);
+        glUniform3f(sun_direction_location, 0.f, 0.5f, 0.5f);
+        glUniform3f(sun_color_location, 1.f, 0.9f, 0.8f);
+
+        glUniform3fv(point_light_position_location, 1, (float *) (&point_light_position));
+        glUniform3f(point_light_color_location, 1.f, 0.1f, 0.1f);
+        glUniform3f(point_light_attenuation_location, 1.f, 0.f, 0.01f);
+
+        glUniform1f(roughness_location, .1f);
+        glUniform1f(glossiness_location, 5.f);
 
         glBindVertexArray(suzanne_vao);
         glDrawElements(GL_TRIANGLES, suzanne.indices.size(), GL_UNSIGNED_INT, nullptr);
