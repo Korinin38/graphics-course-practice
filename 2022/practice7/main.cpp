@@ -119,7 +119,7 @@ void main()
 
 //    vec3 color = ambient + diffus;
     vec3 color = ambient + diffus + spec;
-    out_color = vec4(color, 1.0);
+    out_color = vec4(color, 0.5);
 }
 )";
 
@@ -302,55 +302,72 @@ int main() try {
         glViewport(0, 0, width, height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
-
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
+        if (transparent) {
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        } else {
+            glDisable(GL_BLEND);
+        }
 
-        float near = 0.1f;
-        float far = 100.f;
+        for (int i = -1; i <= 1; ++i) {
+            for (int j = -1; j <= 1; ++j) {
 
-        glm::mat4 model(1.f);
+//        for (int i = -1; i == -1; ++i) {
+//            for (int j = -1; j == -1; ++j) {
 
-        glm::mat4 view(1.f);
-        view = glm::translate(view, {0.f, 0.f, -camera_distance});
-        view = glm::rotate(view, camera_angle, {0.f, 1.f, 0.f});
-        view = glm::translate(view, {-camera_x, 0.f, 0.f});
+                float near = 0.1f;
+                float far = 100.f;
 
-//        view = glm::translate(view, {0.f, 0.f, -5.f});
-//        view = glm::rotate(view, time * 5.F, {0.f, 1.f, 0.f});
-//        glm::vec3 point_light_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+                glm::mat4 model(1.f);
 
+                glm::mat4 view(1.f);
+                view = glm::translate(view, {0.f, 0.f, -camera_distance});
+                view = glm::rotate(view, camera_angle, {0.f, 1.f, 0.f});
+                view = glm::translate(view, {-camera_x, 0.f, 0.f});
 
-        float aspect = (float)height / (float)width;
-        glm::mat4 projection = glm::perspective(glm::pi<float>() / 3.f, (width * 1.f) / height, near, far);
+                float scale = 0.333f;
+                view = glm::translate(view, {(float)i, (float)j, 0});
+                view = glm::scale(view, glm::vec3(scale));
 
-        glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+                float aspect = (float) height / (float) width;
+                glm::mat4 projection = glm::perspective(glm::pi<float>() / 3.f, 1.f/aspect, near, far);
 
-        float speed = 5.f;
-        glm::mat4 point_light(1.f);
-        point_light = glm::translate(point_light, {0.f, 0.f, -8.f});
-        point_light = glm::rotate(point_light, time * speed, {0.f, 1.f, 0.f});
-        glm::vec3 point_light_position = (glm::inverse(point_light) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+                glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-        glUseProgram(program);
-        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-        glUniform3fv(camera_position_location, 1, (float *) (&camera_position));
-        glUniform3f(albedo_location, 0.3f, 0.4f, 0.7f);
-        glUniform3f(ambient_light_location, 0.2f, 0.2f, 0.2f);
-        glUniform3f(sun_direction_location, 0.f, 0.5f, 0.5f);
-        glUniform3f(sun_color_location, 1.f, 0.9f, 0.8f);
+                float speed = 5.f;
+                glm::mat4 point_light(1.f);
+                point_light = glm::translate(point_light, {0.f, 0.f, -8.f});
+                point_light = glm::rotate(point_light, time * speed, {0.f, 1.f, 0.f});
+                glm::vec3 point_light_position = (glm::inverse(point_light) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-        glUniform3fv(point_light_position_location, 1, (float *) (&point_light_position));
-        glUniform3f(point_light_color_location, 1.f, 0.1f, 0.1f);
-        glUniform3f(point_light_attenuation_location, 1.f, 0.f, 0.01f);
+                glUseProgram(program);
+                glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
+                glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+                glUniform3fv(camera_position_location, 1, (float *) (&camera_position));
+                glUniform3f(albedo_location, 0.3f, 0.4f, 0.7f);
+                glUniform3f(ambient_light_location, 0.2f, 0.2f, 0.2f);
+                glUniform3f(sun_direction_location, 0.f, 0.5f, 0.5f);
+                glUniform3f(sun_color_location, 1.f, 0.9f, 0.8f);
 
-        glUniform1f(roughness_location, .1f);
-        glUniform1f(glossiness_location, 5.f);
+                glUniform3fv(point_light_position_location, 1, (float *) (&point_light_position));
+                glUniform3f(point_light_color_location, 1.f, 0.1f, 0.1f);
+                glUniform3f(point_light_attenuation_location, 1.f, 0.f, 0.01f);
 
-        glBindVertexArray(suzanne_vao);
-        glDrawElements(GL_TRIANGLES, suzanne.indices.size(), GL_UNSIGNED_INT, nullptr);
+                float roughness = 0.3f + 0.15f * j - 0.05f * i;
+                float glossiness = 1.0 / (2.0 * roughness);
+
+                glUniform1f(roughness_location, roughness);
+                glUniform1f(glossiness_location, glossiness);
+
+                glBindVertexArray(suzanne_vao);
+                glDrawElements(GL_TRIANGLES, suzanne.indices.size(), GL_UNSIGNED_INT, nullptr);
+            }
+        }
+
 
         SDL_GL_SwapWindow(window);
     }
