@@ -46,6 +46,42 @@ void glew_fail(std::string_view message, GLenum error)
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
+const char vertex_shadow_map_source[] = R"(#version 330 core
+const vec2 VERTICES[6] = vec2[6](
+    vec2(-1.0, -0.2),
+    vec2(-1.0, -1.0),
+    vec2(-0.2, -0.2),
+    vec2(-1.0, -1.0),
+    vec2(-0.2, -1.0),
+    vec2(-0.2, -0.2)
+);
+
+out vec2 pos;
+out vec2 texcoord;
+
+void main()
+{
+    gl_Position = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
+    pos = vec2(gl_Position[0], gl_Position[1]);
+    texcoord = VERTICES[gl_VertexID] * 1.25 + vec2(1.25);
+}
+)";
+
+const char fragment_shadow_map_source[] = R"(#version 330 core
+layout (location = 0) out vec4 out_color;
+
+uniform sampler2DShadow render_result;
+
+in vec2 pos;
+in vec2 texcoord;
+
+void main()
+{
+    vec3 texcrd = vec3(texcoord, 1.0);
+    out_color = vec4(texture(render_result, texcrd));
+}
+)";
+
 const char vertex_shader_source[] =
     R"(#version 330 core
 
@@ -184,8 +220,11 @@ try
     glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
     auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source);
+    auto vertex_shadow_map_shader = create_shader(GL_VERTEX_SHADER, vertex_shadow_map_source);
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
+    auto fragment_shadow_map_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shadow_map_source);
     auto program = create_program(vertex_shader, fragment_shader);
+    auto debug_program = create_program(vertex_shadow_map_shader, fragment_shadow_map_shader);
 
     GLuint model_location = glGetUniformLocation(program, "model");
     GLuint view_location = glGetUniformLocation(program, "view");
@@ -195,9 +234,46 @@ try
     GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
     GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
 
+    GLuint render_result_location = glGetUniformLocation(debug_program, "render_result");
+
+    int shadow_map_size = 1024;
+    GLuint fbo, fbo_render, shadow_texture;
+    glGenTextures(1, &shadow_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, shadow_texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_size, shadow_map_size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+//    glGenRenderbuffers(1, &fbo_render);
+//    glBindRenderbuffer(GL_RENDERBUFFER, fbo_render);
+//    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, shadow_map_size, shadow_map_size);
+
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+    glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadow_texture, 0);
+//    glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, fbo_render);
+
+    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        GLenum error = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        if (error == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT)
+            std::cout << "INCOMPLETE ATTACHMENT" << std::endl;
+        if (error == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT)
+            std::cout << "INCOMPLETE MISSING ATTACHMENT" << std::endl;
+        if (error == GL_FRAMEBUFFER_UNSUPPORTED)
+            std::cout << "UNSUPPORTED" << std::endl;
+        throw std::runtime_error("Framebuffer incomplete");
+    }
+
     std::string project_root = PROJECT_ROOT;
     std::string scene_path = project_root + "/buddha.obj";
     obj_data scene = parse_obj(scene_path);
+
+    GLuint debug_vao;
+    glGenVertexArrays(1, &debug_vao);
 
     GLuint scene_vao, scene_vbo, scene_ebo;
     glGenVertexArrays(1, &scene_vao);
@@ -270,6 +346,7 @@ try
             camera_angle -= 2.f * dt;
 
         glViewport(0, 0, width, height);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
@@ -306,6 +383,14 @@ try
 
         glBindVertexArray(scene_vao);
         glDrawElements(GL_TRIANGLES, scene.indices.size(), GL_UNSIGNED_INT, nullptr);
+
+        glUseProgram(debug_program);
+//        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+        glDisable(GL_DEPTH_TEST);
+        glUniform1i(render_result_location, 0);
+
+        glBindVertexArray(debug_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         SDL_GL_SwapWindow(window);
     }
