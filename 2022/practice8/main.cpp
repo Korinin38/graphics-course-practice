@@ -120,6 +120,9 @@ void main()
 const char fragment_shader_source[] =
     R"(#version 330 core
 
+uniform sampler2D shadow_map;
+uniform mat4 shadow_projection;
+
 uniform vec3 camera_position;
 
 uniform vec3 albedo;
@@ -150,7 +153,18 @@ vec3 phong(vec3 direction) {
 void main()
 {
     float ambient_light = 0.2;
-    vec3 color = albedo * ambient_light + sun_color * phong(sun_direction);
+    vec3 color = albedo * ambient_light;
+
+    vec4 ndc = shadow_projection * vec4(position, 1.0);
+    ndc = ndc / ndc.w;
+    bool in_shadow_texture = (-1.0 <= ndc.x && ndc.x <= 1.0 && -1.0 <= ndc.y && ndc.y <= 1.0 && -1.0 <= ndc.z && ndc.z <= 1.0);
+    ndc = ndc * 0.5 + vec4(0.5);
+    bool in_shadow = (ndc.z > texture(shadow_map, ndc.xy).r);
+
+    if (!in_shadow_texture || !in_shadow)
+    {
+        color += sun_color * phong(sun_direction);
+    }
     out_color = vec4(color, 1.0);
 }
 )";
@@ -250,9 +264,10 @@ try
     GLuint albedo_location = glGetUniformLocation(program, "albedo");
     GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
     GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
+    GLuint shadow_projection_location = glGetUniformLocation(program, "shadow_projection");
 
     GLuint debug_model_location = glGetUniformLocation(shadow_map_program   , "model");
-    GLuint shadow_projection_location = glGetUniformLocation(shadow_map_program, "shadow_projection");
+    GLuint debug_shadow_projection_location = glGetUniformLocation(shadow_map_program, "shadow_projection");
 //    GLuint render_result_location = glGetUniformLocation(debug_program, "render_result");
 
     int shadow_map_size = 1024;
@@ -380,7 +395,7 @@ try
         glBindTexture(GL_TEXTURE_2D, shadow_texture);
 
         glUniformMatrix4fv(debug_model_location, 1, GL_FALSE, reinterpret_cast<float *>(&debug_model));
-        glUniformMatrix4fv(shadow_projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&debug_projection));
+        glUniformMatrix4fv(debug_shadow_projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&debug_projection));
 
         glBindVertexArray(scene_vao);
         glDrawElements(GL_TRIANGLES, scene.indices.size(), GL_UNSIGNED_INT, nullptr);
@@ -413,6 +428,7 @@ try
 
         glUseProgram(program);
 
+        glUniformMatrix4fv(shadow_projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&debug_projection));
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
