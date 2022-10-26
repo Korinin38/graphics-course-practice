@@ -120,7 +120,7 @@ void main()
 const char fragment_shader_source[] =
     R"(#version 330 core
 
-uniform sampler2D shadow_map;
+uniform sampler2DShadow shadow_map;
 uniform mat4 shadow_projection;
 
 uniform vec3 camera_position;
@@ -156,12 +156,11 @@ void main()
     vec3 color = albedo * ambient_light;
 
     vec4 ndc = shadow_projection * vec4(position, 1.0);
-    ndc = ndc / ndc.w;
     bool in_shadow_texture = (-1.0 <= ndc.x && ndc.x <= 1.0 && -1.0 <= ndc.y && ndc.y <= 1.0 && -1.0 <= ndc.z && ndc.z <= 1.0);
     ndc = ndc * 0.5 + vec4(0.5);
-    bool in_shadow = (ndc.z > texture(shadow_map, ndc.xy).r);
+    float in_shadow = texture(shadow_map, ndc.xyz);
 
-    if (!in_shadow_texture || !in_shadow)
+    if (!in_shadow_texture || (in_shadow == 1))
     {
         color += sun_color * phong(sun_direction);
     }
@@ -275,10 +274,12 @@ try
     glGenTextures(1, &shadow_texture);
     glBindTexture(GL_TEXTURE_2D, shadow_texture);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,  GL_LEQUAL);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_size, shadow_map_size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 
     glGenFramebuffers(1, &shadow_fbo);
@@ -379,7 +380,6 @@ try
         glViewport(0, 0, shadow_map_size, shadow_map_size);
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
         glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_FRONT);
 
@@ -388,7 +388,7 @@ try
 
 
         glm::vec3 light_Z = -glm::normalize(glm::vec3(std::sin(time * 0.5f), 2.f, std::cos(time * 0.5f)));
-        glm::vec3  light_X = glm::normalize(glm::cross(light_z, {0.f, 1.f, 0.f}));;
+        glm::vec3  light_X = glm::cross(light_Z, {0.f, 1.f, 0.f});
         glm::vec3  light_Y = glm::cross(light_X, light_Z);
 
         glm::mat4 debug_projection = glm::mat4(glm::transpose(glm::mat3(light_X, light_Y, light_Z)));
