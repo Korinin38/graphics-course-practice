@@ -158,12 +158,26 @@ void main()
     vec4 ndc = shadow_projection * vec4(position, 1.0);
     bool in_shadow_texture = (-1.0 <= ndc.x && ndc.x <= 1.0 && -1.0 <= ndc.y && ndc.y <= 1.0 && -1.0 <= ndc.z && ndc.z <= 1.0);
     ndc = ndc * 0.5 + vec4(0.5);
-    float in_shadow = texture(shadow_map, ndc.xyz);
 
-    if (!in_shadow_texture || (in_shadow == 1))
+    vec3 sum = vec3(0.0);
+    float sum_w = 0.0;
+    const int N = 5;
+    float radius = 3.0;
+    for (int x = -N; x <= N; ++x)
     {
-        color += sun_color * phong(sun_direction);
+        for (int y = -N; y <= N; ++y)
+        {
+            float in_shadow = texture(shadow_map, ndc.xyz + vec3(x,y,0) / vec3(textureSize(shadow_map, 0), 1));
+            float c = exp(-float(x*x + y*y) / (radius*radius));
+            if (!in_shadow_texture || (in_shadow == 1))
+            {
+                sum += c * sun_color * phong(sun_direction);
+            }
+            sum_w += c;
+        }
     }
+
+    color += sum / sum_w;
     out_color = vec4(color, 1.0);
 }
 )";
