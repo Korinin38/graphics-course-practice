@@ -385,8 +385,10 @@ try
 
         glm::mat4 debug_model(1.f);
 
-        glm::vec3 light_Z = glm::vec3(0, -1, 0);
-        glm::vec3  light_X = glm::vec3(1, 0, 0);
+
+
+        glm::vec3 light_Z = -glm::normalize(glm::vec3(std::sin(time * 0.5f), 2.f, std::cos(time * 0.5f)));
+        glm::vec3  light_X = glm::normalize(glm::cross(light_z, {0.f, 1.f, 0.f}));;
         glm::vec3  light_Y = glm::cross(light_X, light_Z);
 
         glm::mat4 debug_projection = glm::mat4(glm::transpose(glm::mat3(light_X, light_Y, light_Z)));
