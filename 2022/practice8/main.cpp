@@ -251,23 +251,23 @@ try
     GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
     GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
 
-    GLuint debug_model_location = glGetUniformLocation(debug_program, "model");
-    GLuint shadow_projection_location = glGetUniformLocation(debug_program, "shadow_projection");
+    GLuint debug_model_location = glGetUniformLocation(shadow_map_program   , "model");
+    GLuint shadow_projection_location = glGetUniformLocation(shadow_map_program, "shadow_projection");
 //    GLuint render_result_location = glGetUniformLocation(debug_program, "render_result");
 
     int shadow_map_size = 1024;
-    GLuint fbo, shadow_texture;
+    GLuint shadow_fbo, shadow_texture;
     glGenTextures(1, &shadow_texture);
     glBindTexture(GL_TEXTURE_2D, shadow_texture);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_size, shadow_map_size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_size, shadow_map_size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+    glGenFramebuffers(1, &shadow_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadow_fbo);
     glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadow_texture, 0);
 
     if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -359,11 +359,12 @@ try
             camera_angle -= 2.f * dt;
 
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadow_fbo);
         glClear(GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, shadow_map_size, shadow_map_size);
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
         glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_FRONT);
 
@@ -425,7 +426,6 @@ try
 
 
         glUseProgram(debug_program);
-        glBindTexture(GL_TEXTURE_2D, shadow_texture);
         glDisable(GL_DEPTH_TEST);
 
         glBindVertexArray(debug_vao);
