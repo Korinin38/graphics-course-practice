@@ -360,8 +360,8 @@ try
 
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-        glViewport(0, 0, width / 4, height / 4);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glViewport(0, 0, shadow_map_size, shadow_map_size);
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -387,7 +387,6 @@ try
         glViewport(0, 0, width, height);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -428,8 +427,6 @@ try
         glUseProgram(debug_program);
         glBindTexture(GL_TEXTURE_2D, shadow_texture);
         glDisable(GL_DEPTH_TEST);
-
-//        glUniform1i(render_result_location, 0);
 
         glBindVertexArray(debug_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
