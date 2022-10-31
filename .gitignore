@@ -7,3 +7,5 @@
 *.webm
 output.mp4
 lectures*
+2022/homework2/external
+./*.zip

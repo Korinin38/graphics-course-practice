@@ -76,6 +76,8 @@ uniform mat4 transform;
 
 uniform sampler2D shadow_map;
 
+uniform float bias;
+
 in vec3 position;
 in vec3 normal;
 
@@ -90,7 +92,7 @@ void main()
     bool in_shadow_texture = (shadow_pos.x > 0.0) && (shadow_pos.x < 1.0) && (shadow_pos.y > 0.0) && (shadow_pos.y < 1.0) && (shadow_pos.z > 0.0) && (shadow_pos.z < 1.0);
     float shadow_factor = 1.0;
     if (in_shadow_texture)
-        shadow_factor = (texture(shadow_map, shadow_pos.xy).r < shadow_pos.z) ? 0.0 : 1.0;
+        shadow_factor = (texture(shadow_map, shadow_pos.xy).r + bias < shadow_pos.z) ? 0.0 : 1.0;
 
     vec3 albedo = vec3(1.0, 1.0, 1.0);
 
@@ -249,6 +251,7 @@ int main() try
     GLuint light_color_location = glGetUniformLocation(program, "light_color");
 
     GLuint shadow_map_location = glGetUniformLocation(program, "shadow_map");
+    GLuint shadow_bias_location = glGetUniformLocation(program, "bias");
 
     glUseProgram(program);
     glUniform1i(shadow_map_location, 0);
@@ -441,6 +444,8 @@ int main() try
         glUniform3f(ambient_location, 0.2f, 0.2f, 0.2f);
         glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
         glUniform3f(light_color_location, 0.8f, 0.8f, 0.8f);
+
+        glUniform1f(shadow_bias_location, 0.01f);
 
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, scene.indices.size(), GL_UNSIGNED_INT, nullptr);
