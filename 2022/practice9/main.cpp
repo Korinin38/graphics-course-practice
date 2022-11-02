@@ -276,6 +276,31 @@ int main() try
     std::string scene_path = project_root + "/bunny.obj";
     obj_data scene = parse_obj(scene_path);
 
+    // 0 - minimum, 1 - maximum
+    float X[2] = {scene.vertices[0].position[0], scene.vertices[0].position[0]};
+    float Y[2] = {scene.vertices[0].position[1], scene.vertices[0].position[1]};
+    float Z[2] = {scene.vertices[0].position[2], scene.vertices[0].position[2]};
+    for (auto v : scene.vertices) {
+        if (v.position[0] < X[0]) {
+            X[0] = v.position[0];
+        }
+        if (v.position[0] > X[1]) {
+            X[1] = v.position[0];
+        }
+        if (v.position[1] < Y[0]) {
+            Y[0] = v.position[1];
+        }
+        if (v.position[1] > Y[1]) {
+            Y[1] = v.position[1];
+        }
+        if (v.position[2] < Z[0]) {
+            Z[0] = v.position[2];
+        }
+        if (v.position[2] > Z[1]) {
+            Z[1] = v.position[2];
+        }
+    }
+    glm::vec3 center((X[1] + X[0]) / 2, (Y[1] + Y[0]) / 2, (Z[1] + Z[0]) / 2);
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -390,15 +415,29 @@ int main() try
         glm::vec3 light_z = -light_direction;
         glm::vec3 light_x = glm::normalize(glm::cross(light_z, {0.f, 1.f, 0.f}));
         glm::vec3 light_y = glm::cross(light_x, light_z);
-        float shadow_scale = 2.f;
 
-        glm::mat4 transform = glm::mat4(1.f);
-        for (size_t i = 0; i < 3; ++i)
-        {
-            transform[i][0] = shadow_scale * light_x[i];
-            transform[i][1] = shadow_scale * light_y[i];
-            transform[i][2] = shadow_scale * light_z[i];
+        glm::vec3 max_len = { 0.f, 0.f, 0.f };
+        for (int ix = 0; ix <= 1; ++ix) {
+            for (int iy = 0; iy <= 1; ++ iy) {
+                for (int iz = 0; iz <= 1; ++iz) {
+                    glm::vec3 v = glm::vec3(X[ix], Y[iy], Z[iz]) - center;
+                    max_len[0] = fmax(max_len[0], abs(glm::dot(v, light_x)));
+                    max_len[1] = fmax(max_len[1], abs(glm::dot(v, light_y)));
+                    max_len[2] = fmax(max_len[2], abs(glm::dot(v, light_z)));
+                }
+            }
         }
+        light_x *= max_len[0];
+        light_y *= max_len[1];
+        light_z *= max_len[2];
+
+        glm::mat4 transform = glm::mat4 { glm::vec4(light_x, 0),
+                                glm::vec4(light_y, 0),
+                                glm::vec4(light_z, 0),
+                                glm::vec4(center, 1) };
+        transform = glm::inverse(transform);
+
+
 
         glUseProgram(shadow_program);
         glUniformMatrix4fv(shadow_model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
