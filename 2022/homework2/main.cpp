@@ -115,7 +115,14 @@ int main(int argc, char *argv[]) try {
 
         int x, y, n;
         unsigned char *texture_data = stbi_load(group.material.albedo.c_str(), &x, &y, &n, 4);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, x, y, 0, GL_RGB, GL_UNSIGNED_BYTE, texture_data);
+        if (texture_data == nullptr) {
+            std::cout << "Cannot load texture " << group.material.albedo.c_str() << ":" << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("Cannot load texture");
+        }
+        if (n == 4)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, x, y, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+        else if (n == 3)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, x, y, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
         glGenerateMipmap(GL_TEXTURE_2D);
         stbi_image_free(texture_data);
     }
@@ -165,7 +172,13 @@ int main(int argc, char *argv[]) try {
 
     std::map<SDL_Keycode, bool> button_down;
 
-    float camera_distance = 1.5f;
+
+    glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f,  3.0f);
+    glm::vec3 camera_front = glm::vec3(0.0f, 0.0f, -1.0f);
+    glm::vec3 camera_up    = glm::vec3(0.0f, 1.0f,  0.0f);
+
+
+    glm::vec3 camera_distance = {0.f, 0.f, 0.f};
     float camera_pitch = 0.f;
     float camera_yaw = glm::pi<float>();
     float camera_roll = 0.f;
@@ -201,25 +214,35 @@ int main(int argc, char *argv[]) try {
         last_frame_start = now;
         time += dt;
 
-        float cam_speed = 1.f;
+        float camera_speed = 6.f;
         if (button_down[SDLK_LSHIFT])
-            cam_speed *= 3;
+            camera_speed *= 5;
         if (button_down[SDLK_LCTRL])
-            cam_speed /= 3;
+            camera_speed /= 3;
 
-        if (button_down[SDLK_w] or button_down[SDLK_UP])
-            camera_distance -= 4.f * cam_speed * dt;
-        if (button_down[SDLK_s] or button_down[SDLK_DOWN])
-            camera_distance += 4.f * cam_speed * dt;
+        if (button_down[SDLK_w])
+            camera_pos += camera_front * camera_speed * dt;
+        if (button_down[SDLK_s])
+            camera_pos -= camera_front * camera_speed * dt;
 
-        if (button_down[SDLK_a] or button_down[SDLK_LEFT])
-            camera_yaw += 2.f * dt;
-        if (button_down[SDLK_d] or button_down[SDLK_RIGHT])
-            camera_yaw -= 2.f * dt;
+        if (button_down[SDLK_a])
+            camera_pos -= glm::normalize(glm::cross(camera_front, camera_up)) * camera_speed * dt;
+        if (button_down[SDLK_d])
+            camera_pos += glm::normalize(glm::cross(camera_front, camera_up)) * camera_speed * dt;
 
-        if (button_down[SDLK_z])
-            camera_pitch += 2.f * dt;
+        if (button_down[SDLK_SPACE])
+            camera_pos += camera_up * camera_speed * dt;
         if (button_down[SDLK_c])
+            camera_pos -= camera_up * camera_speed * dt;
+
+        if (button_down[SDLK_LEFT])
+            camera_yaw -= 2.f * dt;
+        if (button_down[SDLK_RIGHT])
+            camera_yaw += 2.f * dt;
+
+        if (button_down[SDLK_UP])
+            camera_pitch += 2.f * dt;
+        if (button_down[SDLK_DOWN])
             camera_pitch -= 2.f * dt;
 
         if (button_down[SDLK_q])
@@ -237,24 +260,34 @@ int main(int argc, char *argv[]) try {
         glCullFace(GL_BACK);
 
         float near = 0.1f;
-        float far = 100.f;
+        float far = 1000.f;
+
+        camera_pitch = std::max(-glm::pi<float>() / 2 + 0.01f, std::min(glm::pi<float>() / 2 - 0.01f, camera_pitch));
+
+        glm::vec3 direction;
+        direction.x = cos(camera_yaw) * cos(camera_pitch); // Note that we convert the angle to radians first
+        direction.y = sin(camera_pitch);
+        direction.z = sin(camera_yaw) * cos(camera_pitch);
+        camera_front = glm::normalize(direction);
 
         glm::mat4 model(1.f);
 
         glm::mat4 view(1.f);
-        view = glm::translate(view, {0.f, 0.f, -camera_distance});
-        view = glm::rotate(view, glm::pi<float>() / 6.f, {1.f, 0.f, 0.f});
-        view = glm::rotate(view, camera_pitch, {1.f, 0.f, 0.f});
-        view = glm::rotate(view, camera_yaw, {0.f, 1.f, 0.f});
-        view = glm::rotate(view, camera_roll, {0.f, 0.f, 1.f});
-        view = glm::translate(view, {0.f, -0.5f, 0.f});
+
+        view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
+//        view = glm::rotate(view, glm::pi<float>() / 6.f, {1.f, 0.f, 0.f});
+//        view = glm::rotate(view, camera_pitch, {1.f, 0.f, 0.f});
+//        view = glm::rotate(view, camera_yaw, {0.f, 1.f, 0.f});
+//        view = glm::rotate(view, camera_roll, {0.f, 0.f, 1.f});
+//        view = glm::translate(view, camera_distance);
+//        view = glm::translate(view, {0.f, -0.5f, 0.f});
 
         float aspect = (float) height / (float) width;
         glm::mat4 projection = glm::perspective(glm::pi<float>() / 3.f, 1.f / aspect, near, far);
 
         glm::vec3 camera_position = glm::vec3(glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f));
 
-        glm::vec3 sun_direction = glm::normalize(glm::vec3(std::sin(time * 0.5f), 2.f, std::cos(time * 0.5f)));
+        glm::vec3 sun_direction = glm::normalize(glm::vec3(std::sin(time * 0.5f), 3.f, std::cos(time * 0.5f)));
 
         glUseProgram(program);
 
