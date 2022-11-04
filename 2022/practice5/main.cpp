@@ -235,7 +235,7 @@ int main() try
 
     int x, y, n;
     unsigned char* texture_data = stbi_load(cow_texture_path.c_str(), &x, &y, &n, 4);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, x, y, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, x, y, 0, GL_RGB, GL_UNSIGNED_BYTE, texture_data);
     glGenerateMipmap(GL_TEXTURE_2D);
     stbi_image_free(texture_data);
 

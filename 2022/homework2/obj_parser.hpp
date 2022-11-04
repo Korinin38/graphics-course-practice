@@ -6,10 +6,10 @@
 
 namespace obj_parser {
     struct mtl {
-        std::array<float, 3> glossiness; // Ks
-        float power;      // Ns
-        std::string albedo;              // map_Ka
-        std::string transparency;        // map_d
+        std::array<float, 3> glossiness;    // Ks
+        float roughness;                    // Ns
+        std::filesystem::path albedo;       // map_Ka
+        std::filesystem::path transparency; // map_d
     };
 
     typedef std::map<std::string, mtl> mtllib;

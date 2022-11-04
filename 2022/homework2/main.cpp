@@ -4,7 +4,9 @@
 #include <SDL.h>
 #undef main
 #else
+
 #include <SDL2/SDL.h>
+
 #endif
 
 #include <GL/glew.h>
@@ -25,6 +27,7 @@
 #include <glm/gtx/string_cast.hpp>
 
 #include "obj_parser.hpp"
+#include "stb_image.h"
 
 
 std::string to_string(std::string_view str) {
@@ -36,10 +39,10 @@ void sdl2_fail(std::string_view message) {
 }
 
 void glew_fail(std::string_view message, GLenum error) {
-    throw std::runtime_error(to_string(message) + reinterpret_cast<const char*>(glewGetErrorString(error)));
+    throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
-int main(int argc, char* argv[]) try {
+int main(int argc, char *argv[]) try {
     if (argc < 2) {
         throw std::invalid_argument("Expected \"*.obj\" file path");
     }
@@ -57,7 +60,7 @@ int main(int argc, char* argv[]) try {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
-    SDL_Window* window = SDL_CreateWindow("Graphics course homework 2",
+    SDL_Window *window = SDL_CreateWindow("Graphics course homework 2",
                                           SDL_WINDOWPOS_CENTERED,
                                           SDL_WINDOWPOS_CENTERED,
                                           800, 600,
@@ -96,6 +99,26 @@ int main(int argc, char* argv[]) try {
     std::string scene_path = argv[1];
     obj_parser::obj_data scene = obj_parser::parse_obj(scene_path);
 
+    // Load textures
+    std::map<std::string, int> textures_albedo;
+    std::map<std::string, int> textures_transparency;
+    int tex_num = 0;
+    for (auto &[name, group]: scene.groups) {
+        std::cout << name << " " << tex_num << std::endl;
+        GLuint texture;
+        glGenTextures(1, &texture);
+        textures_albedo[name] = tex_num++;
+        glActiveTexture(GL_TEXTURE0 + textures_albedo[name]);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        int x, y, n;
+        unsigned char *texture_data = stbi_load(group.material.albedo.c_str(), &x, &y, &n, 4);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, x, y, 0, GL_RGB, GL_UNSIGNED_BYTE, texture_data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        stbi_image_free(texture_data);
+    }
 
     // Uniforms - vertex
     GLuint model_location = glGetUniformLocation(program, "model");
@@ -107,7 +130,8 @@ int main(int argc, char* argv[]) try {
     GLuint albedo_location = glGetUniformLocation(program, "albedo");
     GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
     GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
-
+    GLuint glossiness_location = glGetUniformLocation(program, "glossiness");
+    GLuint roughness_location = glGetUniformLocation(program, "roughness");
 
     float time = 0.f;
 
@@ -119,12 +143,13 @@ int main(int argc, char* argv[]) try {
 
     glGenBuffers(1, &scene_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, scene_vbo);
-    glBufferData(GL_ARRAY_BUFFER, scene.vertices.size() * sizeof(scene.vertices[0]), scene.vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, scene.vertices.size() * sizeof(scene.vertices[0]), scene.vertices.data(),
+                 GL_STATIC_DRAW);
 
     glGenBuffers(1, &scene_ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene_ebo);
 
-    for( auto& [name, group] : scene.groups) {
+    for (auto &[name, group]: scene.groups) {
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, group.indices.size() * sizeof(group.indices[0]), group.indices.data(),
                      GL_STATIC_DRAW);
         // lazy first element
@@ -134,7 +159,9 @@ int main(int argc, char* argv[]) try {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), nullptr);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), (void *)(12));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), (void *) (12));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), (void *) (24));
 
     std::map<SDL_Keycode, bool> button_down;
 
@@ -146,14 +173,12 @@ int main(int argc, char* argv[]) try {
     bool running = true;
     while (running) {
         for (SDL_Event event; SDL_PollEvent(&event);)
-            switch (event.type)
-            {
+            switch (event.type) {
                 case SDL_QUIT:
                     running = false;
                     break;
                 case SDL_WINDOWEVENT:
-                    switch (event.window.event)
-                    {
+                    switch (event.window.event) {
                         case SDL_WINDOWEVENT_RESIZED:
                             width = event.window.data1;
                             height = event.window.data2;
@@ -224,7 +249,7 @@ int main(int argc, char* argv[]) try {
         view = glm::rotate(view, camera_roll, {0.f, 0.f, 1.f});
         view = glm::translate(view, {0.f, -0.5f, 0.f});
 
-        float aspect = (float)height / (float)width;
+        float aspect = (float) height / (float) width;
         glm::mat4 projection = glm::perspective(glm::pi<float>() / 3.f, 1.f / aspect, near, far);
 
         glm::vec3 camera_position = glm::vec3(glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f));
@@ -236,13 +261,15 @@ int main(int argc, char* argv[]) try {
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-        glUniform3fv(camera_position_location, 1, (float *)(&camera_position));
+        glUniform3fv(camera_position_location, 1, (float *) (&camera_position));
         glUniform3f(sun_color_location, 1.f, 1.f, 1.f);
         glUniform3fv(sun_direction_location, 1, reinterpret_cast<float *>(&sun_direction));
 
         glBindVertexArray(scene_vao);
-        for( auto& [name, group] : scene.groups) {
-            glUniform3f(albedo_location, 0.8f, .7f, .6f);
+        for (auto &[name, group]: scene.groups) {
+            glUniform1i(albedo_location, textures_albedo[name]);
+            glUniform3fv(glossiness_location, 1, reinterpret_cast<float *>(&group.material.glossiness));
+            glUniform1f(roughness_location, group.material.roughness);
 
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, group.indices.size() * sizeof(group.indices[0]), group.indices.data(),
                          GL_STATIC_DRAW);
@@ -256,7 +283,7 @@ int main(int argc, char* argv[]) try {
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
 }
-catch (std::exception const& e) {
+catch (std::exception const &e) {
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
 }

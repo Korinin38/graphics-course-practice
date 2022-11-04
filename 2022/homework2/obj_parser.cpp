@@ -52,11 +52,17 @@ namespace obj_parser {
                 auto &n = material.glossiness;
                 ls >> n[0] >> n[1] >> n[2];
             } else if (tag == "Ns") {
-                ls >> material.power;
+                ls >> material.roughness;
             } else if (tag == "map_Ka") {
-                ls >> material.albedo;
+                std::string tex_name;
+                ls >> tex_name;
+                material.albedo = path.parent_path();
+                material.albedo += "/" + tex_name;
             } else if (tag == "map_d") {
-                ls >> material.transparency;
+                std::string tex_name;
+                ls >> tex_name;
+                material.transparency = path.parent_path();
+                material.transparency += "/" + tex_name;
             }
         }
 
@@ -107,8 +113,8 @@ namespace obj_parser {
                 parse_mtl(mtlpath, mtllib);
             } else if (tag == "usemtl") {
                 ls >> mtl_name;
-                if (mtllib.find(mtl_name) == mtllib.end())
-                    fail("unknown material name \"", mtl_name, "\"");
+//                if (mtllib.find(mtl_name) == mtllib.end())
+//                    fail("unknown material name \"", mtl_name, "\"");
                 cur_group.material = mtllib[mtl_name];
             } else if (tag == "g") {
                 if (!group_name.empty())
