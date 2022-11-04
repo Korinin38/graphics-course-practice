@@ -1,19 +1,35 @@
 #pragma once
 
 #include <vector>
+#include <map>
 #include <filesystem>
 
-struct obj_data
-{
-    struct vertex
-    {
-        std::array<float, 3> position;
-        std::array<float, 3> normal;
-        std::array<float, 2> texcoord;
+namespace obj_parser {
+    struct mtl {
+        std::array<float, 3> glossiness; // Ks
+        float power;      // Ns
+        std::string albedo;              // map_Ka
+        std::string transparency;        // map_d
     };
 
-    std::vector<vertex> vertices;
-    std::vector<std::uint32_t> indices;
-};
+    typedef std::map<std::string, mtl> mtllib;
 
-obj_data parse_obj(std::filesystem::path const & path);
+    struct obj_data {
+        struct vertex {
+            std::array<float, 3> position;  // v
+            std::array<float, 3> normal;    // vn
+            std::array<float, 2> texcoord;  // vt
+        };
+        struct group {
+            mtl material;
+            std::vector<std::uint32_t> indices;
+        };
+        std::vector<vertex> vertices;
+        std::map<std::string, group> groups; // g / f
+    };
+
+
+    // expands already existing mtl library
+    void parse_mtl(std::filesystem::path const &path, mtllib& add);
+    obj_data parse_obj(std::filesystem::path const &path);
+}

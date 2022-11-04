@@ -4,9 +4,7 @@
 #include <SDL.h>
 #undef main
 #else
-
 #include <SDL2/SDL.h>
-
 #endif
 
 #include <GL/glew.h>
@@ -96,7 +94,8 @@ int main(int argc, char* argv[]) try {
             create_shader(GL_FRAGMENT_SHADER, grid_frag_shader_source.data()));
 
     std::string scene_path = argv[1];
-    obj_data scene = parse_obj(scene_path);
+    obj_parser::obj_data scene = obj_parser::parse_obj(scene_path);
+
 
     // Uniforms - vertex
     GLuint model_location = glGetUniformLocation(program, "model");
@@ -124,17 +123,25 @@ int main(int argc, char* argv[]) try {
 
     glGenBuffers(1, &scene_ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene_ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, scene.indices.size() * sizeof(scene.indices[0]), scene.indices.data(), GL_STATIC_DRAW);
+
+    for( auto& [name, group] : scene.groups) {
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, group.indices.size() * sizeof(group.indices[0]), group.indices.data(),
+                     GL_STATIC_DRAW);
+        // lazy first element
+        break;
+    }
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), nullptr);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), nullptr);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void *)(12));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), (void *)(12));
 
     std::map<SDL_Keycode, bool> button_down;
 
     float camera_distance = 1.5f;
-    auto camera_angle = glm::pi<float>();
+    float camera_pitch = 0.f;
+    float camera_yaw = glm::pi<float>();
+    float camera_roll = 0.f;
 
     bool running = true;
     while (running) {
@@ -169,15 +176,31 @@ int main(int argc, char* argv[]) try {
         last_frame_start = now;
         time += dt;
 
-        if (button_down[SDLK_UP])
-            camera_distance -= 4.f * dt;
-        if (button_down[SDLK_DOWN])
-            camera_distance += 4.f * dt;
+        float cam_speed = 1.f;
+        if (button_down[SDLK_LSHIFT])
+            cam_speed *= 3;
+        if (button_down[SDLK_LCTRL])
+            cam_speed /= 3;
 
-        if (button_down[SDLK_LEFT])
-            camera_angle += 2.f * dt;
-        if (button_down[SDLK_RIGHT])
-            camera_angle -= 2.f * dt;
+        if (button_down[SDLK_w] or button_down[SDLK_UP])
+            camera_distance -= 4.f * cam_speed * dt;
+        if (button_down[SDLK_s] or button_down[SDLK_DOWN])
+            camera_distance += 4.f * cam_speed * dt;
+
+        if (button_down[SDLK_a] or button_down[SDLK_LEFT])
+            camera_yaw += 2.f * dt;
+        if (button_down[SDLK_d] or button_down[SDLK_RIGHT])
+            camera_yaw -= 2.f * dt;
+
+        if (button_down[SDLK_z])
+            camera_pitch += 2.f * dt;
+        if (button_down[SDLK_c])
+            camera_pitch -= 2.f * dt;
+
+        if (button_down[SDLK_q])
+            camera_roll += 2.f * dt;
+        if (button_down[SDLK_e])
+            camera_roll -= 2.f * dt;
 
 
         glViewport(0, 0, width, height);
@@ -196,7 +219,9 @@ int main(int argc, char* argv[]) try {
         glm::mat4 view(1.f);
         view = glm::translate(view, {0.f, 0.f, -camera_distance});
         view = glm::rotate(view, glm::pi<float>() / 6.f, {1.f, 0.f, 0.f});
-        view = glm::rotate(view, camera_angle, {0.f, 1.f, 0.f});
+        view = glm::rotate(view, camera_pitch, {1.f, 0.f, 0.f});
+        view = glm::rotate(view, camera_yaw, {0.f, 1.f, 0.f});
+        view = glm::rotate(view, camera_roll, {0.f, 0.f, 1.f});
         view = glm::translate(view, {0.f, -0.5f, 0.f});
 
         float aspect = (float)height / (float)width;
@@ -212,12 +237,17 @@ int main(int argc, char* argv[]) try {
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(camera_position_location, 1, (float *)(&camera_position));
-        glUniform3f(albedo_location, .8f, .7f, .6f);
         glUniform3f(sun_color_location, 1.f, 1.f, 1.f);
         glUniform3fv(sun_direction_location, 1, reinterpret_cast<float *>(&sun_direction));
 
         glBindVertexArray(scene_vao);
-        glDrawElements(GL_TRIANGLES, scene.indices.size(), GL_UNSIGNED_INT, nullptr);
+        for( auto& [name, group] : scene.groups) {
+            glUniform3f(albedo_location, 0.8f, .7f, .6f);
+
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, group.indices.size() * sizeof(group.indices[0]), group.indices.data(),
+                         GL_STATIC_DRAW);
+            glDrawElements(GL_TRIANGLES, group.indices.size(), GL_UNSIGNED_INT, nullptr);
+        }
 
 
         SDL_GL_SwapWindow(window);
