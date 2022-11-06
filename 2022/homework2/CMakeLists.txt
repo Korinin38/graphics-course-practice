@@ -10,6 +10,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules")
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(SDL2 REQUIRED)
+find_package(GLUT REQUIRED)
 
 if(APPLE)
 	# brew version of glew doesn't provide GLEW_* variables
@@ -30,11 +31,13 @@ target_include_directories(${TARGET_NAME} PUBLIC
 		"${SDL2_INCLUDE_DIRS}"
 		"${GLEW_INCLUDE_DIRS}"
 		"${OPENGL_INCLUDE_DIRS}"
+		"${GLUT_INCLUDE_DIRS}"
 		)
 target_link_libraries(${TARGET_NAME} PUBLIC
 		glm
 		"${GLEW_LIBRARIES}"
 		"${SDL2_LIBRARIES}"
 		"${OPENGL_LIBRARIES}"
+		"${GLUT_LIBRARY}"
 		)
 target_compile_definitions(${TARGET_NAME} PUBLIC -DPROJECT_ROOT="${PROJECT_ROOT}")

@@ -8,8 +8,8 @@ namespace obj_parser {
     struct mtl {
         std::array<float, 3> glossiness;    // Ks
         float roughness;                    // Ns
-        std::filesystem::path albedo;       // map_Ka
-        std::filesystem::path transparency; // map_d
+        std::string albedo;       // map_Ka
+        std::string transparency; // map_d
     };
 
     typedef std::map<std::string, mtl> mtllib;
@@ -22,9 +22,11 @@ namespace obj_parser {
         };
         struct group {
             mtl material;
-            std::vector<std::uint32_t> indices;
+            std::uint32_t offset;
+            std::uint32_t count;
         };
         std::vector<vertex> vertices;
+        std::vector<std::uint32_t> indices;
         std::map<std::string, group> groups; // g / f
     };
 

@@ -48,6 +48,8 @@ namespace obj_parser {
                 if (material_name != "")
                     lib[material_name] = material;
                 ls >> material_name;
+                material.albedo = "";
+                material.transparency = "";
             } else if (tag == "Ks") {
                 auto &n = material.glossiness;
                 ls >> n[0] >> n[1] >> n[2];
@@ -56,12 +58,14 @@ namespace obj_parser {
             } else if (tag == "map_Ka") {
                 std::string tex_name;
                 ls >> tex_name;
-                material.albedo = path.parent_path();
+                std::replace(tex_name.begin(), tex_name.end(), '\\', '/');
+                material.albedo = path.parent_path().string();
                 material.albedo += "/" + tex_name;
             } else if (tag == "map_d") {
                 std::string tex_name;
                 ls >> tex_name;
-                material.transparency = path.parent_path();
+                std::replace(tex_name.begin(), tex_name.end(), '\\', '/');
+                material.transparency = path.parent_path().string();
                 material.transparency += "/" + tex_name;
             }
         }
@@ -120,6 +124,8 @@ namespace obj_parser {
                 if (!group_name.empty())
                     result.groups[group_name] = cur_group;
                 ls >> group_name;
+                cur_group.offset = result.indices.size();
+                cur_group.count = 0;
             } else if (tag == "v") {
                 auto &p = positions.emplace_back();
                 ls >> p[0] >> p[1] >> p[2];
@@ -212,10 +218,11 @@ namespace obj_parser {
                 }
 
                 for (std::size_t i = 1; i + 1 < vertices.size(); ++i) {
-                    cur_group.indices.push_back(vertices[0]);
-                    cur_group.indices.push_back(vertices[i]);
-                    cur_group.indices.push_back(vertices[i + 1]);
+                    result.indices.push_back(vertices[0]);
+                    result.indices.push_back(vertices[i]);
+                    result.indices.push_back(vertices[i + 1]);
                 }
+                cur_group.count += 3 * vertices.size();
             }
         }
 

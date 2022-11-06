@@ -100,19 +100,28 @@ int main(int argc, char *argv[]) try {
     obj_parser::obj_data scene = obj_parser::parse_obj(scene_path);
 
     // Load textures
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    int a[4] = {0, 0, 0, 0};
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, a);
+
     std::map<std::string, int> textures_albedo;
     std::map<std::string, int> textures_transparency;
     int tex_num = 0;
     for (auto &[name, group]: scene.groups) {
-        std::cout << name << " " << tex_num << std::endl;
-        GLuint texture;
         glGenTextures(1, &texture);
-        textures_albedo[name] = tex_num++;
-        glActiveTexture(GL_TEXTURE0 + textures_albedo[name]);
+        textures_albedo[name] = texture;
+        glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+        if (group.material.albedo.empty()) {
+            std::cout << "no texture!" << std::endl;
+            continue;
+        }
         int x, y, n;
         unsigned char *texture_data = stbi_load(group.material.albedo.c_str(), &x, &y, &n, 4);
         if (texture_data == nullptr) {
@@ -124,21 +133,49 @@ int main(int argc, char *argv[]) try {
         else if (n == 3)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, x, y, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
         glGenerateMipmap(GL_TEXTURE_2D);
+
+//        if (group.material.transparency.empty()) {
+////            std::cout << "no transparency!" << std::endl;
+//        }
         stbi_image_free(texture_data);
+
+
+        glGenTextures(1, &texture);
+        textures_transparency[name] = texture;
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        if (group.material.transparency.empty()) {
+//            std::cout << "no transparency!" << std::endl;
+            continue;
+        }
+        texture_data = stbi_load(group.material.transparency.c_str(), &x, &y, &n, 1);
+        if (texture_data == nullptr) {
+            std::cout << "Cannot load transparency " << group.material.transparency.c_str() << ":" << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("Cannot load transparency");
+        }
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, x, y, 0, GL_RED, GL_UNSIGNED_BYTE, texture_data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        stbi_image_free(texture_data);
+        ++tex_num;
     }
 
     // Uniforms - vertex
-    GLuint model_location = glGetUniformLocation(program, "model");
-    GLuint view_location = glGetUniformLocation(program, "view");
-    GLuint projection_location = glGetUniformLocation(program, "projection");
+    auto model_location = glGetUniformLocation(program, "model");
+    auto view_location = glGetUniformLocation(program, "view");
+    auto projection_location = glGetUniformLocation(program, "projection");
 
     // Uniforms - fragment
-    GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
-    GLuint albedo_location = glGetUniformLocation(program, "albedo");
-    GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
-    GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
-    GLuint glossiness_location = glGetUniformLocation(program, "glossiness");
-    GLuint roughness_location = glGetUniformLocation(program, "roughness");
+    auto camera_position_location = glGetUniformLocation(program, "camera_position");
+    auto sun_direction_location = glGetUniformLocation(program, "sun_direction");
+    auto sun_color_location = glGetUniformLocation(program, "sun_color");
+    auto glossiness_location = glGetUniformLocation(program, "glossiness");
+    auto roughness_location = glGetUniformLocation(program, "roughness");
+    auto albedo_location = glGetUniformLocation(program, "albedo");
+    auto transparency_location = glGetUniformLocation(program, "transparency");
+    auto solid_location = glGetUniformLocation(program, "solid");
 
     float time = 0.f;
 
@@ -156,12 +193,8 @@ int main(int argc, char *argv[]) try {
     glGenBuffers(1, &scene_ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene_ebo);
 
-    for (auto &[name, group]: scene.groups) {
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, group.indices.size() * sizeof(group.indices[0]), group.indices.data(),
-                     GL_STATIC_DRAW);
-        // lazy first element
-        break;
-    }
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, scene.indices.size() * sizeof(scene.indices[0]), scene.indices.data(),
+                 GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_parser::obj_data::vertex), nullptr);
@@ -260,7 +293,7 @@ int main(int argc, char *argv[]) try {
         glCullFace(GL_BACK);
 
         float near = 0.1f;
-        float far = 1000.f;
+        float far = 500.f;
 
         camera_pitch = std::max(-glm::pi<float>() / 2 + 0.01f, std::min(glm::pi<float>() / 2 - 0.01f, camera_pitch));
 
@@ -275,12 +308,6 @@ int main(int argc, char *argv[]) try {
         glm::mat4 view(1.f);
 
         view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
-//        view = glm::rotate(view, glm::pi<float>() / 6.f, {1.f, 0.f, 0.f});
-//        view = glm::rotate(view, camera_pitch, {1.f, 0.f, 0.f});
-//        view = glm::rotate(view, camera_yaw, {0.f, 1.f, 0.f});
-//        view = glm::rotate(view, camera_roll, {0.f, 0.f, 1.f});
-//        view = glm::translate(view, camera_distance);
-//        view = glm::translate(view, {0.f, -0.5f, 0.f});
 
         float aspect = (float) height / (float) width;
         glm::mat4 projection = glm::perspective(glm::pi<float>() / 3.f, 1.f / aspect, near, far);
@@ -300,13 +327,31 @@ int main(int argc, char *argv[]) try {
 
         glBindVertexArray(scene_vao);
         for (auto &[name, group]: scene.groups) {
-            glUniform1i(albedo_location, textures_albedo[name]);
+            if  (group.material.albedo.empty()) {
+                glUniform1i(albedo_location, 0);
+            }
+            else {
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, textures_albedo[name]);
+                glUniform1i(albedo_location, 1);
+            }
+
+            if  (group.material.transparency.empty()) {
+                glUniform1i(solid_location, 1);
+                glUniform1i(transparency_location, 1);
+            }
+            else {
+                glUniform1i(solid_location, 0);
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, textures_transparency[name]);
+                glUniform1i(transparency_location, 2);
+            }
+
+
             glUniform3fv(glossiness_location, 1, reinterpret_cast<float *>(&group.material.glossiness));
             glUniform1f(roughness_location, group.material.roughness);
 
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, group.indices.size() * sizeof(group.indices[0]), group.indices.data(),
-                         GL_STATIC_DRAW);
-            glDrawElements(GL_TRIANGLES, group.indices.size(), GL_UNSIGNED_INT, nullptr);
+            glDrawElements(GL_TRIANGLES, group.count, GL_UNSIGNED_INT, (uint32_t*)nullptr + group.offset);
         }
 
 
