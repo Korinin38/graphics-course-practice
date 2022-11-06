@@ -6,6 +6,7 @@
 
 namespace obj_parser {
     struct mtl {
+        std::string name;
         std::array<float, 3> glossiness;    // Ks
         float roughness;                    // Ns
         std::string albedo;       // map_Ka

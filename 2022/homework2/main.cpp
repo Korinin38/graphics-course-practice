@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) try {
     if (!GLEW_VERSION_3_3)
         throw std::runtime_error("OpenGL 3.3 is not supported");
 
-    glClearColor(1.f, 1.f, 1.f, 0.f);
+    glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
     glEnable(GL_PRIMITIVE_RESTART);
     glPrimitiveRestartIndex(config.PRIMITIVE_RESTART_INDEX);
@@ -99,6 +99,32 @@ int main(int argc, char *argv[]) try {
     std::string scene_path = argv[1];
     obj_parser::obj_data scene = obj_parser::parse_obj(scene_path);
 
+    // Bounding box
+    // 0 - minimum, 1 - maximum
+    float X[2] = {scene.vertices[0].position[0], scene.vertices[0].position[0]};
+    float Y[2] = {scene.vertices[0].position[1], scene.vertices[0].position[1]};
+    float Z[2] = {scene.vertices[0].position[2], scene.vertices[0].position[2]};
+    for (auto v : scene.vertices) {
+        if (v.position[0] < X[0]) {
+            X[0] = v.position[0];
+        }
+        if (v.position[0] > X[1]) {
+            X[1] = v.position[0];
+        }
+        if (v.position[1] < Y[0]) {
+            Y[0] = v.position[1];
+        }
+        if (v.position[1] > Y[1]) {
+            Y[1] = v.position[1];
+        }
+        if (v.position[2] < Z[0]) {
+            Z[0] = v.position[2];
+        }
+        if (v.position[2] > Z[1]) {
+            Z[1] = v.position[2];
+        }
+    }
+    glm::vec3 center((X[1] + X[0]) / 2, (Y[1] + Y[0]) / 2, (Z[1] + Z[0]) / 2);
     // Load textures
     GLuint texture;
     glGenTextures(1, &texture);
@@ -110,9 +136,11 @@ int main(int argc, char *argv[]) try {
     std::map<std::string, int> textures_albedo;
     std::map<std::string, int> textures_transparency;
     int tex_num = 0;
-    for (auto &[name, group]: scene.groups) {
+    for (auto &[_, group]: scene.groups) {
+        if (textures_albedo.find(group.material.name) != textures_albedo.end())
+            continue;
         glGenTextures(1, &texture);
-        textures_albedo[name] = texture;
+        textures_albedo[group.material.name] = texture;
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -141,7 +169,9 @@ int main(int argc, char *argv[]) try {
 
 
         glGenTextures(1, &texture);
-        textures_transparency[name] = texture;
+        if (textures_transparency.find(group.material.name) != textures_transparency.end())
+            continue;
+        textures_transparency[group.material.name] = texture;
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -150,6 +180,9 @@ int main(int argc, char *argv[]) try {
         if (group.material.transparency.empty()) {
 //            std::cout << "no transparency!" << std::endl;
             continue;
+        }
+        else {
+            std::cout << group.material.transparency << std::endl;
         }
         texture_data = stbi_load(group.material.transparency.c_str(), &x, &y, &n, 1);
         if (texture_data == nullptr) {
@@ -215,6 +248,7 @@ int main(int argc, char *argv[]) try {
     float camera_pitch = 0.f;
     float camera_yaw = glm::pi<float>();
     float camera_roll = 0.f;
+    float map_size = std::max(std::max(X[1] - X[0], Y[1] - Y[0]), Z[1] - Z[0]);
 
     bool running = true;
     while (running) {
@@ -247,11 +281,11 @@ int main(int argc, char *argv[]) try {
         last_frame_start = now;
         time += dt;
 
-        float camera_speed = 6.f;
+        float camera_speed = map_size / 60.0;
         if (button_down[SDLK_LSHIFT])
-            camera_speed *= 5;
+            camera_speed *= 3;
         if (button_down[SDLK_LCTRL])
-            camera_speed /= 3;
+            camera_speed *= 3;
 
         if (button_down[SDLK_w])
             camera_pos += camera_front * camera_speed * dt;
@@ -293,7 +327,7 @@ int main(int argc, char *argv[]) try {
         glCullFace(GL_BACK);
 
         float near = 0.1f;
-        float far = 500.f;
+        float far = map_size * 1.6f;
 
         camera_pitch = std::max(-glm::pi<float>() / 2 + 0.01f, std::min(glm::pi<float>() / 2 - 0.01f, camera_pitch));
 
@@ -326,28 +360,29 @@ int main(int argc, char *argv[]) try {
         glUniform3fv(sun_direction_location, 1, reinterpret_cast<float *>(&sun_direction));
 
         glBindVertexArray(scene_vao);
-        for (auto &[name, group]: scene.groups) {
+        for (auto &[_, group]: scene.groups) {
             if  (group.material.albedo.empty()) {
-                glUniform1i(albedo_location, 0);
+//                glUniform1i(albedo_location, 0);
             }
             else {
                 glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, textures_albedo[name]);
+                glBindTexture(GL_TEXTURE_2D, textures_albedo[group.material.name]);
                 glUniform1i(albedo_location, 1);
             }
 
             if  (group.material.transparency.empty()) {
-                glUniform1i(solid_location, 1);
-                glUniform1i(transparency_location, 1);
+//                glUniform1i(solid_location, 1);
+//                glUniform1i(transparency_location, 1);
             }
             else {
-                glUniform1i(solid_location, 0);
+//                glUniform1i(solid_location, 0);
                 glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, textures_transparency[name]);
+                glBindTexture(GL_TEXTURE_2D, textures_transparency[group.material.name]);
                 glUniform1i(transparency_location, 2);
             }
 
 
+            glUniform1i(solid_location, 1);
             glUniform3fv(glossiness_location, 1, reinterpret_cast<float *>(&group.material.glossiness));
             glUniform1f(roughness_location, group.material.roughness);
 

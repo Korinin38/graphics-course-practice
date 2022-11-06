@@ -25,10 +25,6 @@ namespace obj_parser {
         std::string line;
         std::size_t line_count = 0;
 
-//        auto fail = [&](auto const &... args) {
-//            throw std::runtime_error(to_string("Error parsing OBJ data, line ", line_count, ": ", args...));
-//        };
-
         std::string material_name = "";
         mtl material;
 
@@ -41,13 +37,20 @@ namespace obj_parser {
 
             std::istringstream ls(std::move(line));
 
+            auto fail = [&](auto const &... args) {
+                throw std::runtime_error(to_string("Error parsing material data, line ", line_count, ": ", args...));
+            };
+
             std::string tag;
             ls >> tag;
 
             if (tag == "newmtl") {
-                if (material_name != "")
+                if (material_name != "") // must be only empty if first
                     lib[material_name] = material;
                 ls >> material_name;
+                if (material_name.empty())
+                    fail("Empty material name");
+                material.name = material_name;
                 material.albedo = "";
                 material.transparency = "";
             } else if (tag == "Ks") {
