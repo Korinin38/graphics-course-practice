@@ -28,7 +28,7 @@ namespace obj_parser {
         };
         std::vector<vertex> vertices;
         std::vector<std::uint32_t> indices;
-        std::map<std::string, group> groups; // g / f
+        std::vector<group> groups; // g / f
     };
 
 

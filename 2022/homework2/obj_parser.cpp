@@ -120,15 +120,21 @@ namespace obj_parser {
                 parse_mtl(mtlpath, mtllib);
             } else if (tag == "usemtl") {
                 ls >> mtl_name;
-//                if (mtllib.find(mtl_name) == mtllib.end())
-//                    fail("unknown material name \"", mtl_name, "\"");
+                if (!group_name.empty()) // TODO: better switch to bool
+                    result.groups.push_back(cur_group);
+
+                // clearing material
                 cur_group.material = mtllib[mtl_name];
-            } else if (tag == "g") {
-                if (!group_name.empty())
-                    result.groups[group_name] = cur_group;
-                ls >> group_name;
                 cur_group.offset = result.indices.size();
                 cur_group.count = 0;
+            } else if (tag == "g") {
+                // groups are now divided by materials used by them
+//                if (!group_name.empty())
+//                    result.groups.push_back(cur_group);
+                ls >> group_name;
+                // clearing material
+//                cur_group.offset = result.indices.size();
+//                cur_group.count = 0;
             } else if (tag == "v") {
                 auto &p = positions.emplace_back();
                 ls >> p[0] >> p[1] >> p[2];
@@ -229,7 +235,7 @@ namespace obj_parser {
             }
         }
 
-        result.groups[group_name] = cur_group;
+        result.groups.push_back(cur_group);
         return result;
     }
 }
