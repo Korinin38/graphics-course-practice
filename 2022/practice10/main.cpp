@@ -318,7 +318,7 @@ int main() try
     GLuint reflection_map_location = glGetUniformLocation(program, "reflection_map");
 
     GLuint environment_map_location = glGetUniformLocation(env_program, "environment_map");
-    GLuint environment_camera_location = glGetUniformLocation(env_program, "projection");
+    GLuint environment_camera_location = glGetUniformLocation(env_program, "camera_position");
     GLuint environment_view_location = glGetUniformLocation(env_program, "view_projection_inverse");
 
     GLuint skybox_vao;
