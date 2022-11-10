@@ -149,7 +149,7 @@ const float PI = 3.141592653589793;
 
 void main()
 {
-    vec3 dir = normalize(camera_position - position);
+    vec3 dir = normalize(position - camera_position);
     float x = atan(dir.z, dir.x) / PI * 0.5 + 0.5;
     float y = -atan(dir.y, length(dir.xz)) / PI + 0.5;
 
