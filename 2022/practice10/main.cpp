@@ -102,7 +102,7 @@ void main()
     vec3 cam_dir = normalize(camera_position - position);
     vec3 dir = 2.0 * real_normal * dot(real_normal, cam_dir) - cam_dir;
     float x = atan(dir.z, dir.x) / PI * 0.5 + 0.5;
-    float y = -atan(dir.y, length(dir.xz)) / PI * 0.5 + 0.5;
+    float y = -atan(dir.y, length(dir.xz)) / PI + 0.5;
 
 
     vec3 albedo = texture(albedo_texture, texcoord).rgb;
@@ -113,6 +113,48 @@ void main()
 
     out_color = vec4(lightness * mix(albedo, reflection, 0.5), 1.0);
 //    out_color = vec4(lightness * reflection, 1.0);
+}
+)";
+
+const char environment_vertex_source[] = R"(#version 330 core
+const vec2 VERTICES[6] = vec2[6](
+    vec2(-1.0, -1.0),
+    vec2(1.0, -1.0),
+    vec2(-1.0, 1.0),
+    vec2(-1.0, 1.0),
+    vec2(1.0, -1.0),
+    vec2(1.0, 1.0)
+);
+
+uniform mat4 view_projection_inverse;
+out vec3 position;
+
+void main()
+{
+    vec4 ndc = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
+    gl_Position = ndc;
+    vec4 clip_space = view_projection_inverse * ndc;
+    position = clip_space.xyz / clip_space.w;
+}
+)";
+const char environment_fragment_source[] = R"(#version 330 core
+layout (location = 0) out vec4 out_color;
+
+uniform sampler2D environment_map;
+uniform vec3 camera_position;
+
+in vec3 position;
+
+const float PI = 3.141592653589793;
+
+void main()
+{
+    vec3 dir = normalize(camera_position - position);
+    float x = atan(dir.z, dir.x) / PI * 0.5 + 0.5;
+    float y = -atan(dir.y, length(dir.xz)) / PI + 0.5;
+
+    vec3 albedo = texture(environment_map, vec2(x, y)).rgb;
+    out_color = vec4(albedo, 1.0);
 }
 )";
 
@@ -262,6 +304,8 @@ int main() try
     auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source);
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
+    auto env_program = create_program(create_shader(GL_VERTEX_SHADER, environment_vertex_source),
+                                             create_shader(GL_FRAGMENT_SHADER, environment_fragment_source));
 
     GLuint model_location = glGetUniformLocation(program, "model");
     GLuint view_location = glGetUniformLocation(program, "view");
@@ -271,6 +315,13 @@ int main() try
     GLuint albedo_texture_location = glGetUniformLocation(program, "albedo_texture");
     GLuint normal_texture_location = glGetUniformLocation(program, "normal_texture");
     GLuint reflection_map_location = glGetUniformLocation(program, "reflection_map");
+
+    GLuint environment_map_location = glGetUniformLocation(env_program, "environment_map");
+    GLuint environment_camera_location = glGetUniformLocation(env_program, "projection");
+    GLuint environment_view_location = glGetUniformLocation(env_program, "view_projection_inverse");
+
+    GLuint skybox_vao;
+    glGenVertexArrays(1, &skybox_vao);
 
     GLuint sphere_vao, sphere_vbo, sphere_ebo;
     glGenVertexArrays(1, &sphere_vao);
@@ -356,10 +407,11 @@ int main() try
         if (button_down[SDLK_RIGHT])
             view_azimuth += 2.f * dt;
 
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
 
         float near = 0.1f;
         float far = 100.f;
@@ -379,6 +431,19 @@ int main() try
         glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
         glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+
+//        glm::mat4 view_projection_inverse = projection * view;
+        glm::mat4 view_projection_inverse = glm::inverse( view);
+        glUseProgram(env_program);
+        glUniform3fv(environment_camera_location, 1, reinterpret_cast<float *>(&camera_position));
+        glUniformMatrix4fv(environment_view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view_projection_inverse));
+        glUniform1i(environment_map_location, 2);
+
+        glBindVertexArray(skybox_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
 
         glUseProgram(program);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
