@@ -127,6 +127,7 @@ const vec2 VERTICES[6] = vec2[6](
 );
 
 uniform mat4 view_projection_inverse;
+
 out vec3 position;
 
 void main()
@@ -149,7 +150,7 @@ const float PI = 3.141592653589793;
 
 void main()
 {
-    vec3 dir = normalize(camera_position - position);
+    vec3 dir = normalize(position - camera_position);
     float x = atan(dir.z, dir.x) / PI * 0.5 + 0.5;
     float y = -atan(dir.y, length(dir.xz)) / PI + 0.5;
 
@@ -410,9 +411,6 @@ int main() try
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-
         float near = 0.1f;
         float far = 100.f;
         float top = near;
@@ -432,13 +430,18 @@ int main() try
 
         glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-//        glm::mat4 view_projection_inverse = projection * view;
-        glm::mat4 view_projection_inverse = glm::inverse( view);
+        glm::mat4 view_projection_inverse = glm::inverse( projection * view);
+
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+
         glUseProgram(env_program);
         glUniform3fv(environment_camera_location, 1, reinterpret_cast<float *>(&camera_position));
         glUniformMatrix4fv(environment_view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view_projection_inverse));
         glUniform1i(environment_map_location, 2);
 
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, environment_map);
         glBindVertexArray(skybox_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
