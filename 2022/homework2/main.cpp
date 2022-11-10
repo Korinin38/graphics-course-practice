@@ -121,7 +121,7 @@ int main(int argc, char *argv[]) try {
     auto shadow_model_location = glGetUniformLocation(global_shadow_program, "model");
     auto shadow_transform_location = glGetUniformLocation(global_shadow_program, "transform");
 
-    GLsizei shadow_map_resolution = 1024;
+    GLsizei shadow_map_resolution = 2048;
 
     GLuint shadow_map;
     glGenTextures(1, &shadow_map);
@@ -399,7 +399,7 @@ int main(int argc, char *argv[]) try {
 
         glm::mat4 model(1.f);
 
-        glm::vec3 light_direction = glm::normalize(glm::vec3(std::cos(time * 0.5f), 1.f, std::sin(time * 0.5f)));
+        glm::vec3 light_direction = glm::normalize(glm::vec3(std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)));
 
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
@@ -504,7 +504,7 @@ int main(int argc, char *argv[]) try {
 
             if  (group.material.transparency.empty()) {
                 glUniform1i(solid_location, 1);
-//                glUniform1i(transparency_location, 1);
+//                glUniform1i(transparency_location, 0);
             }
             else {
 //                if (group.material.name == "Glass_Pane")
@@ -516,7 +516,7 @@ int main(int argc, char *argv[]) try {
 //                glUniform1i(transparency_location, textures_transparency[group.material.transparency].second);
             }
 
-            glUniform1i(solid_location, 0);
+//            glUniform1i(solid_location, 0);
             glUniform3fv(glossiness_location, 1, reinterpret_cast<float *>(&group.material.glossiness));
             glUniform1f(roughness_location, group.material.roughness);
 
