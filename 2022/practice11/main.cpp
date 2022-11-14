@@ -89,15 +89,16 @@ void main()
     );
     for (int i = 0; i < 4; ++i)
     {
-
+        vec3 billboard_z = normalize(vertices[i] - camera_position);
+        vec3 billboard_x = normalize(cross(billboard_z, vec3(0.0, 1.0, 0.0)));
+        vec3 billboard_y = cross(billboard_x, billboard_z);
         texcoord = (vertices[i].xy * 0.5 + vec2(s, s) * 0.5) / s;
-        gl_Position = projection * view * model * vec4(center + vertices[i], 1.0);
 
-//        vec3 billboard_z = normalize(gl_Position.xyz - camera_position);
-//        vec3 billboard_x = normalize(cross(billboard_z, vec3(0.0, 1.0, 0.0)));
-//        vec3 billboard_y = cross(billboard_x, billboard_z);
-//
-//        gl_Position += vec4(billboard_x * vertices[i].x + billboard_y * vertices[i].y, 0.0);
+        vec3 bil_pos = billboard_x * vertices[i].x + billboard_y * vertices[i].y;
+
+        gl_Position = projection * view * model * vec4(center + bil_pos, 1.0);
+
+
 
         EmitVertex();
     }
