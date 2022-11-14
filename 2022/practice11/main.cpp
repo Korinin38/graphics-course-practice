@@ -163,9 +163,13 @@ struct particle
 {
     glm::vec3 position;
     float size;
+    glm::vec3 velocity;
     particle() {
         position = glm::vec3();
-        size = 0.1f * (float)(rand() % 3) + 0.02;
+        size = 0.1f * (float)(rand() % 3) + 0.2;
+        velocity = glm::vec3((float) (rand() % 100) * 0.001,
+                             (float) (rand() % 100) * 0.004 - 0.2,
+                             (float) (rand() % 100) * 0.004 - 0.2);
     }
 };
 
@@ -303,10 +307,22 @@ int main() try
         if (button_down[SDLK_RIGHT])
             camera_rotation += 3.f * dt;
 
+        float A = 0.1;
+        float C = 0.1;
+        float D = 0.1;
+        if (!paused) {
+            for (auto& p : particles) {
+                p.velocity.y += dt * A;
+                p.position += p.velocity * dt;
+                p.velocity *= exp(-C * dt);
+                p.size *= exp(-D * dt);
+            }
+        }
+
+        float near = 0.1f;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
-        float near = 0.1f;
         float far = 100.f;
 
         glm::mat4 model(1.f);
