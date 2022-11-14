@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cert-msc50-cpp"
 #ifdef WIN32
 #include <SDL.h>
 #undef main
@@ -48,10 +50,14 @@ const char vertex_shader_source[] =
 R"(#version 330 core
 
 layout (location = 0) in vec3 in_position;
+layout (location = 1) in float in_size;
+
+out float size;
 
 void main()
 {
     gl_Position = vec4(in_position, 1.0);
+    size = in_size;
 }
 )";
 
@@ -61,15 +67,40 @@ R"(#version 330 core
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+uniform vec3 camera_position;
 
 layout (points) in;
-layout (points, max_vertices = 1) out;
+layout (triangle_strip, max_vertices = 4) out;
+
+in float size[];
+
+out vec2 texcoord;
 
 void main()
 {
     vec3 center = gl_in[0].gl_Position.xyz;
-    gl_Position = projection * view * model * vec4(center, 1.0);
-    EmitVertex();
+    float s = size[0];
+    vec3 vertices[4] = vec3[4]
+    (
+            vec3(-s, -s, 0),
+            vec3(-s,  s, 0),
+            vec3( s, -s, 0),
+            vec3( s,  s, 0)
+    );
+    for (int i = 0; i < 4; ++i)
+    {
+
+        texcoord = (vertices[i].xy * 0.5 + vec2(s, s) * 0.5) / s;
+        gl_Position = projection * view * model * vec4(center + vertices[i], 1.0);
+
+//        vec3 billboard_z = normalize(gl_Position.xyz - camera_position);
+//        vec3 billboard_x = normalize(cross(billboard_z, vec3(0.0, 1.0, 0.0)));
+//        vec3 billboard_y = cross(billboard_x, billboard_z);
+//
+//        gl_Position += vec4(billboard_x * vertices[i].x + billboard_y * vertices[i].y, 0.0);
+
+        EmitVertex();
+    }
     EndPrimitive();
 }
 
@@ -80,9 +111,11 @@ R"(#version 330 core
 
 layout (location = 0) out vec4 out_color;
 
+in vec2 texcoord;
+
 void main()
 {
-    out_color = vec4(1.0, 0.0, 0.0, 1.0);
+    out_color = vec4(texcoord, 0.0, 1.0);
 }
 )";
 
@@ -128,6 +161,11 @@ GLuint create_program(Shaders ... shaders)
 struct particle
 {
     glm::vec3 position;
+    float size;
+    particle() {
+        position = glm::vec3();
+        size = 0.1f * (float)(rand() % 3) + 0.02;
+    }
 };
 
 int main() try
@@ -196,7 +234,9 @@ int main() try
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(0));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (float*)nullptr + 3);
 
     const std::string project_root = PROJECT_ROOT;
     const std::string particle_texture_path = project_root + "/particle.png";
@@ -287,7 +327,7 @@ int main() try
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-        glUniform4fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
+        glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
 
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, particles.size());
@@ -303,3 +343,5 @@ catch (std::exception const & e)
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
 }
+
+#pragma clang diagnostic pop
