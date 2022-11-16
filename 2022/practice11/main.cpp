@@ -94,7 +94,7 @@ void main()
     );
     for (int i = 0; i < 4; ++i)
     {
-        vec3 billboard_z = normalize(vertices[i] - camera_position);
+        vec3 billboard_z = normalize(center - camera_position);
         vec3 billboard_x = normalize(cross(billboard_z, vec3(0.0, 1.0, 0.0)));
         vec3 billboard_y = cross(billboard_x, billboard_z);
 
@@ -103,11 +103,9 @@ void main()
 
         texcoord = (vertices[i].xy * 0.5 + vec2(s, s) * 0.5) / s;
 
-        vec3 bil_pos = billboard_x * vertices[i].x - billboard_y * vertices[i].y;
+        vec3 bil_pos = billboard_x * vertices[i].x + billboard_y * vertices[i].y;
 
         gl_Position = projection * view * model * vec4(center + bil_pos, 1.0);
-
-
 
         EmitVertex();
     }
@@ -119,13 +117,20 @@ void main()
 const char fragment_shader_source[] =
 R"(#version 330 core
 
+uniform sampler2D albedo;
+uniform sampler1D palette;
+
 layout (location = 0) out vec4 out_color;
 
+in vec4 color;
 in vec2 texcoord;
 
 void main()
 {
-    out_color = vec4(texcoord, 0.0, 1.0);
+    vec4 color = texture(albedo, texcoord);
+    out_color = texture(palette, color.r) * color.r;
+//    out_color = vec4(texcoord, 0.0, 1.0);
+    out_color.w = color.r;
 }
 )";
 
@@ -192,6 +197,20 @@ struct particle
     }
 };
 
+typedef struct texture1d_t {
+    int size;
+    std::vector<uint32_t> pixels;
+
+    explicit texture1d_t(int _size, std::vector<uint32_t> palette) {
+        size = _size;
+        pixels.resize(size);
+        for (int i = 0; i < size; ++i) {
+                int color_index = i * palette.size() / size;
+                pixels[i] = palette[color_index];
+        }
+    }
+} texture1d_t;
+
 int main() try
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -240,6 +259,9 @@ int main() try
     GLuint projection_location = glGetUniformLocation(program, "projection");
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
 
+    GLuint albedo_location = glGetUniformLocation(program, "albedo");
+    GLuint palette_location = glGetUniformLocation(program, "palette");
+
     std::vector<particle> particles(1);
     particles.reserve(256);
 
@@ -259,6 +281,27 @@ int main() try
 
     const std::string project_root = PROJECT_ROOT;
     const std::string particle_texture_path = project_root + "/particle.png";
+
+    int x, y, n;
+    auto image_data = stbi_load(particle_texture_path.c_str(), &x, &y, &n, 4);
+    GLuint particle_texture;
+    glGenTextures(1, &particle_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, particle_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, x, y, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(image_data);
+
+    GLuint particle_palette;
+    glGenTextures(1, &particle_palette);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_1D, particle_palette);
+    texture1d_t palette(x, {0x000000FF, 0xAA0044FF, 0xFF8800FF, 0xFFFF00FF, 0xFFFF00FF, 0xFFFF00FF, 0xFFFF00FF, 0xFF8800FF});
+    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, x, 0, GL_RGBA, GL_UNSIGNED_BYTE, palette.pixels.data());
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glPointSize(5.f);
 
@@ -323,7 +366,7 @@ int main() try
 
         float acceleration = 0.8;
         float friction = 0.3;
-        float deflation = 0.4;
+        float deflation = 0.2;
         if (!paused) {
             if (particles.size() < 256)
                 particles.emplace_back();
@@ -341,7 +384,9 @@ int main() try
 
         float near = 0.1f;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
+//        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
         float far = 100.f;
 
@@ -365,6 +410,8 @@ int main() try
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
+        glUniform1i(albedo_location, 0);
+        glUniform1i(palette_location, 1);
 
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, particles.size());
