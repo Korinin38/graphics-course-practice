@@ -51,13 +51,16 @@ R"(#version 330 core
 
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in float in_size;
+layout (location = 2) in float in_angle;
 
 out float size;
+out float angle;
 
 void main()
 {
     gl_Position = vec4(in_position, 1.0);
     size = in_size;
+    angle = in_angle;
 }
 )";
 
@@ -73,6 +76,7 @@ layout (points) in;
 layout (triangle_strip, max_vertices = 4) out;
 
 in float size[];
+in float angle[];
 
 out vec2 texcoord;
 
@@ -80,6 +84,7 @@ void main()
 {
     vec3 center = gl_in[0].gl_Position.xyz;
     float s = size[0];
+    float a = angle[0];
     vec3 vertices[4] = vec3[4]
     (
             vec3(-s, -s, 0),
@@ -92,9 +97,13 @@ void main()
         vec3 billboard_z = normalize(vertices[i] - camera_position);
         vec3 billboard_x = normalize(cross(billboard_z, vec3(0.0, 1.0, 0.0)));
         vec3 billboard_y = cross(billboard_x, billboard_z);
+
+        billboard_x = cos(a) * billboard_x + sin(a) * billboard_y;
+        billboard_y = cross(billboard_x, billboard_z);
+
         texcoord = (vertices[i].xy * 0.5 + vec2(s, s) * 0.5) / s;
 
-        vec3 bil_pos = billboard_x * vertices[i].x + billboard_y * vertices[i].y;
+        vec3 bil_pos = billboard_x * vertices[i].x - billboard_y * vertices[i].y;
 
         gl_Position = projection * view * model * vec4(center + bil_pos, 1.0);
 
@@ -159,17 +168,27 @@ GLuint create_program(Shaders ... shaders)
     return result;
 }
 
+std::default_random_engine rng;
+
 struct particle
 {
     glm::vec3 position;
     float size;
+    float angle;
     glm::vec3 velocity;
+    float angular_velocity;
     particle() {
-        position = glm::vec3();
+
+        position.x = std::uniform_real_distribution<float>{-1.f, 1.f}(rng);
+        position.y = 0.f;
+        position.z = std::uniform_real_distribution<float>{-1.f, 1.f}(rng);
+
         size = 0.1f * (float)(rand() % 3) + 0.2;
+        angle = glm::pi<float>() / 30 * (float)(rand() % 30) ;
         velocity = glm::vec3((float) (rand() % 100) * 0.001,
                              (float) (rand() % 100) * 0.004 - 0.2,
                              (float) (rand() % 100) * 0.004 - 0.2);
+        angular_velocity = glm::pi<float>() / 12 * (float)(rand() % 12) - glm::pi<float>() / 2;
     }
 };
 
@@ -221,15 +240,8 @@ int main() try
     GLuint projection_location = glGetUniformLocation(program, "projection");
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
 
-    std::default_random_engine rng;
-
-    std::vector<particle> particles(256);
-    for (auto & p : particles)
-    {
-        p.position.x = std::uniform_real_distribution<float>{-1.f, 1.f}(rng);
-        p.position.y = 0.f;
-        p.position.z = std::uniform_real_distribution<float>{-1.f, 1.f}(rng);
-    }
+    std::vector<particle> particles(1);
+    particles.reserve(256);
 
     GLuint vao, vbo;
     glGenVertexArrays(1, &vao);
@@ -241,7 +253,9 @@ int main() try
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), nullptr);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (float*)nullptr + 3);
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (char*)nullptr + offsetof(particle, size));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(particle),  (char*)nullptr + offsetof(particle, angle));
 
     const std::string project_root = PROJECT_ROOT;
     const std::string particle_texture_path = project_root + "/particle.png";
@@ -307,15 +321,21 @@ int main() try
         if (button_down[SDLK_RIGHT])
             camera_rotation += 3.f * dt;
 
-        float A = 0.1;
-        float C = 0.1;
-        float D = 0.1;
+        float acceleration = 0.8;
+        float friction = 0.3;
+        float deflation = 0.4;
         if (!paused) {
+            if (particles.size() < 256)
+                particles.emplace_back();
             for (auto& p : particles) {
-                p.velocity.y += dt * A;
+                p.velocity.y += dt * acceleration;
+                if (p.velocity.y >= 1.8 || p.size < 0.01) {
+                    p = {};
+                }
                 p.position += p.velocity * dt;
-                p.velocity *= exp(-C * dt);
-                p.size *= exp(-D * dt);
+                p.velocity *= exp(-friction * dt);
+                p.size *= exp(-deflation * dt);
+                p.angle += p.angular_velocity * dt;
             }
         }
 
