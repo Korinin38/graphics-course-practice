@@ -68,6 +68,7 @@ void main()
 const char fragment_shader_source[] =
 R"(#version 330 core
 
+uniform sampler3D cloud_texture;
 uniform vec3 camera_position;
 uniform vec3 light_direction;
 uniform vec3 bbox_min;
@@ -107,13 +108,41 @@ vec2 intersect_bbox(vec3 origin, vec3 direction)
     return vec2(vmax(tmin), vmin(tmax));
 }
 
+float tex_from_space(vec3 pos)
+{
+    return texture(cloud_texture, (pos - bbox_min) / (bbox_max - bbox_min)).x;
+}
+
 const float PI = 3.1415926535;
+const float absorption = 1.0;
 
 in vec3 position;
 
 void main()
 {
-    out_color = vec4(1.0, 0.5, 0.5, 1.0);
+    vec3 direction = normalize(position - camera_position);
+    vec2 intersect_interval = intersect_bbox(camera_position, direction);
+    float tmax = intersect_interval.y;
+    float tmin = intersect_interval.x;
+    tmin = max(tmin, 0.0);
+
+//    float optical_depth = (tmax - tmin) * absorption;
+    float optical_depth = 0;
+    for (int i = 0; i < 64; ++i)
+    {
+        float dt = (tmax - tmin) / 64;
+        float t = tmin + (i + 0.5) * dt;
+        vec3 p = camera_position + t * direction;
+        float density = tex_from_space(p);
+        optical_depth += absorption * density * dt;
+    }
+    float opacity = 1.0 - exp(-optical_depth);
+
+    vec3 p = camera_position + direction * (tmin + tmax) / 2.0;
+    vec3 color = vec3(tex_from_space(p));
+//    out_color = vec4(vec3(tmax - tmin) / 4, 1.0);
+//    out_color = vec4(color, 1.0);
+    out_color = vec4(color, opacity);
 }
 )";
 
@@ -236,6 +265,7 @@ int main() try
     GLuint bbox_max_location = glGetUniformLocation(program, "bbox_max");
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
     GLuint light_direction_location = glGetUniformLocation(program, "light_direction");
+    GLuint texture_location = glGetUniformLocation(program, "cloud_texture");
 
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);
@@ -254,6 +284,21 @@ int main() try
 
     const std::string project_root = PROJECT_ROOT;
     const std::string cloud_data_path = project_root + "/cloud.data";
+
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_3D, texture);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    int x = 128, y = 64, z = 64;
+    std::vector<char> pixels(x * y * z);
+    std::ifstream input(cloud_data_path, std::ios::binary);
+    input.read(pixels.data(), pixels.size());
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_R8, x, y, z, 0, GL_RED, GL_UNSIGNED_BYTE, pixels.data());
 
     const glm::vec3 cloud_bbox_min{-2.f, -1.f, -1.f};
     const glm::vec3 cloud_bbox_max{ 2.f,  1.f,  1.f};
@@ -357,6 +402,7 @@ int main() try
         glUniform3fv(bbox_max_location, 1, reinterpret_cast<const float *>(&cloud_bbox_max));
         glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
         glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+        glUniform1i(texture_location, 0);
 
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, std::size(cube_indices), GL_UNSIGNED_INT, nullptr);
