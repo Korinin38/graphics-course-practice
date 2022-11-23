@@ -114,10 +114,12 @@ float tex_from_space(vec3 pos)
 }
 
 const float PI = 3.1415926535;
-const float absorption = 0.0;
-const float scattering = 4.0;
-const float extinction = absorption + scattering;
+const vec3 absorption = vec3(0.0, 0.0, 0.0);
+const vec3 scattering = vec3(8.0, 4.0, 2.0);
+const vec3 extinction = absorption + scattering;
 const vec3 light_color = vec3(16.0);
+const int N = 32;
+const int M = 8;
 
 in vec3 position;
 
@@ -129,21 +131,21 @@ void main()
     float tmax = intersect_interval.y;
     tmin = max(tmin, 0.0);
 
-    float optical_depth = 0;
+    vec3 optical_depth = vec3(0);
     vec3 color = vec3(0.0);
-    for (int i = 0; i < 64; ++i)
+    for (int i = 0; i < N; ++i)
     {
-        float dt = (tmax - tmin) / 64;
+        float dt = (tmax - tmin) / N;
         float t = tmin + (i + 0.5) * dt;
         vec3 p = camera_position + t * direction;
         float density = tex_from_space(p);
         optical_depth += extinction * density * dt;
 
-        float light_optical_depth = 0;
+        vec3 light_optical_depth = vec3(0);
         vec2 ib = intersect_bbox(p, light_direction);
         ib.x = max(ib.x, 0.0);
-        float ds = (ib.y - ib.x) / 16;
-        for (int j = 0; j < 16; ++j)
+        float ds = (ib.y - ib.x) / M;
+        for (int j = 0; j < M; ++j)
         {
             float s = ib.x + (j + 0.5) * ds;
             vec3 q = p + s * light_direction;
@@ -151,7 +153,7 @@ void main()
         }
         color += light_color * exp(-light_optical_depth) * exp(-optical_depth) * dt * density * scattering / 4.0 / PI;
     }
-    float opacity = 1.0 - exp(-optical_depth);
+    float opacity = 1.0 - exp(-optical_depth.x);
 
     out_color = vec4(color, opacity);
 }
@@ -379,7 +381,7 @@ int main() try
         if (button_down[SDLK_s])
             view_angle += 2.f * dt;
 
-        glClearColor(0.8f, 0.8f, 0.9f, 0.f);
+        glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_DEPTH_TEST);
