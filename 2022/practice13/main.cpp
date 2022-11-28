@@ -355,19 +355,20 @@ int main() try {
         std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(input_model.bones.size(), glm::mat4x3(scale));
 
         std::string anim_name = "01_Run";
-        const gltf_model::animation animation = input_model.animations.at(anim_name);
+        auto anim_bones = input_model.animations.at(anim_name).bones;
 
-        for (int i = 0; i < animation.bones.size(); ++i) {
-            auto translation = glm::translate(glm::mat4(1.f), animation.bones[i].translation(0.f));
-            auto scaling = glm::scale(glm::mat4(1.f), animation.bones[i].scale(0.f));
-            auto rotation = glm::toMat4(animation.bones[i].rotation(0.f));
+        for (int i = 0; i < anim_bones.size(); ++i) {
+            auto bone = anim_bones[i];
+            glm::mat4 translation = glm::translate(glm::mat4(1.f), bone.translation(0.f));
+            glm::mat4 scaling = glm::scale(glm::mat4(1.f), bone.scale(0.f));
+            glm::mat4 rotation = glm::toMat4(bone.rotation(0.f));
             glm::mat4 transform = translation * rotation * scaling;
 
             if (input_model.bones[i].parent != -1) {
-                int p = input_model.bones[i].parent;
-                auto p_translation = glm::translate(glm::mat4(1.f), animation.bones[p].translation(0.f));
-                auto p_scaling = glm::scale(glm::mat4(1.f), animation.bones[p].scale(0.f));
-                auto p_rotation = glm::toMat4(animation.bones[p].rotation(0.f));
+                auto parent = anim_bones[input_model.bones[i].parent];
+                glm::mat4 p_translation = glm::translate(glm::mat4(1.f), parent.translation(0.f));
+                glm::mat4 p_scaling = glm::scale(glm::mat4(1.f), parent.scale(0.f));
+                glm::mat4 p_rotation = glm::toMat4(parent.rotation(0.f));
                 glm::mat4 p_transform = p_translation * p_rotation * p_scaling;
 
                 transform = p_transform * transform;
