@@ -2,7 +2,9 @@
 #include <SDL.h>
 #undef main
 #else
+
 #include <SDL2/SDL.h>
+
 #endif
 
 #include <GL/glew.h>
@@ -19,6 +21,7 @@
 
 #define GLM_FORCE_SWIZZLE
 #define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -30,32 +33,31 @@
 #include "gltf_loader.hpp"
 #include "stb_image.h"
 
-std::string to_string(std::string_view str)
-{
+std::string to_string(std::string_view str) {
     return std::string(str.begin(), str.end());
 }
 
-void sdl2_fail(std::string_view message)
-{
+void sdl2_fail(std::string_view message) {
     throw std::runtime_error(to_string(message) + SDL_GetError());
 }
 
-void glew_fail(std::string_view message, GLenum error)
-{
+void glew_fail(std::string_view message, GLenum error) {
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
 const char vertex_shader_source[] =
-R"(#version 330 core
+        R"(#version 330 core
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
+uniform mat4x3 bones[64];
+
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
 layout (location = 2) in vec2 in_texcoord;
-layout (location = 3) in vec4 in_joints;
+layout (location = 3) in ivec4 in_joints;
 layout (location = 4) in vec4 in_weights;
 
 out vec3 normal;
@@ -64,15 +66,20 @@ out vec4 weights;
 
 void main()
 {
-    gl_Position = projection * view * model * vec4(in_position, 1.0);
-    normal = mat3(model) * in_normal;
+    mat4x3 average = bones[in_joints.x] * in_weights.x
+                   + bones[in_joints.y] * in_weights.y
+                   + bones[in_joints.z] * in_weights.z
+                   + bones[in_joints.w] * in_weights.w;
+
+    gl_Position = projection * view * model * mat4(average) * vec4(in_position, 1.0);
+    normal = mat3(model) * mat3(average) * in_normal;
     texcoord = in_texcoord;
     weights = in_weights;
 }
 )";
 
 const char fragment_shader_source[] =
-R"(#version 330 core
+        R"(#version 330 core
 
 uniform sampler2D albedo;
 uniform vec4 color;
@@ -98,20 +105,18 @@ void main()
     float ambient = 0.4;
     float diffuse = max(0.0, dot(normalize(normal), light_direction));
 
-//    out_color = vec4(albedo_color.rgb * (ambient + diffuse), albedo_color.a);
-    out_color = vec4(weights);
+    out_color = vec4(albedo_color.rgb * (ambient + diffuse), albedo_color.a);
+//    out_color = vec4(weights);
 }
 )";
 
-GLuint create_shader(GLenum type, const char * source)
-{
+GLuint create_shader(GLenum type, const char *source) {
     GLuint result = glCreateShader(type);
     glShaderSource(result, 1, &source, nullptr);
     glCompileShader(result);
     GLint status;
     glGetShaderiv(result, GL_COMPILE_STATUS, &status);
-    if (status != GL_TRUE)
-    {
+    if (status != GL_TRUE) {
         GLint info_log_length;
         glGetShaderiv(result, GL_INFO_LOG_LENGTH, &info_log_length);
         std::string info_log(info_log_length, '\0');
@@ -121,17 +126,15 @@ GLuint create_shader(GLenum type, const char * source)
     return result;
 }
 
-template <typename ... Shaders>
-GLuint create_program(Shaders ... shaders)
-{
+template<typename ... Shaders>
+GLuint create_program(Shaders ... shaders) {
     GLuint result = glCreateProgram();
     (glAttachShader(result, shaders), ...);
     glLinkProgram(result);
 
     GLint status;
     glGetProgramiv(result, GL_LINK_STATUS, &status);
-    if (status != GL_TRUE)
-    {
+    if (status != GL_TRUE) {
         GLint info_log_length;
         glGetProgramiv(result, GL_INFO_LOG_LENGTH, &info_log_length);
         std::string info_log(info_log_length, '\0');
@@ -142,8 +145,7 @@ GLuint create_program(Shaders ... shaders)
     return result;
 }
 
-int main() try
-{
+int main() try {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         sdl2_fail("SDL_Init: ");
 
@@ -158,11 +160,11 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    SDL_Window * window = SDL_CreateWindow("Graphics course practice 11",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        800, 600,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+    SDL_Window *window = SDL_CreateWindow("Graphics course practice 11",
+                                          SDL_WINDOWPOS_CENTERED,
+                                          SDL_WINDOWPOS_CENTERED,
+                                          800, 600,
+                                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
 
     if (!window)
         sdl2_fail("SDL_CreateWindow: ");
@@ -191,6 +193,7 @@ int main() try
     GLuint color_location = glGetUniformLocation(program, "color");
     GLuint use_texture_location = glGetUniformLocation(program, "use_texture");
     GLuint light_direction_location = glGetUniformLocation(program, "light_direction");
+    GLuint bones_location = glGetUniformLocation(program, "bones");
 
     const std::string project_root = PROJECT_ROOT;
     const std::string model_path = project_root + "/wolf/Wolf-Blender-2.82a.gltf";
@@ -201,26 +204,25 @@ int main() try
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, input_model.buffer.size(), input_model.buffer.data(), GL_STATIC_DRAW);
 
-    struct mesh
-    {
+    struct mesh {
         GLuint vao;
         gltf_model::accessor indices;
         gltf_model::material material;
     };
 
-    auto setup_attribute = [](int index, gltf_model::accessor const & accessor, bool integer = false)
-    {
+    auto setup_attribute = [](int index, gltf_model::accessor const &accessor, bool integer = false) {
         glEnableVertexAttribArray(index);
         if (integer)
-            glVertexAttribIPointer(index, accessor.size, accessor.type, 0, reinterpret_cast<void *>(accessor.view.offset));
+            glVertexAttribIPointer(index, accessor.size, accessor.type, 0,
+                                   reinterpret_cast<void *>(accessor.view.offset));
         else
-            glVertexAttribPointer(index, accessor.size, accessor.type, GL_FALSE, 0, reinterpret_cast<void *>(accessor.view.offset));
+            glVertexAttribPointer(index, accessor.size, accessor.type, GL_FALSE, 0,
+                                  reinterpret_cast<void *>(accessor.view.offset));
     };
 
     std::vector<mesh> meshes;
-    for (auto const & mesh : input_model.meshes)
-    {
-        auto & result = meshes.emplace_back();
+    for (auto const &mesh: input_model.meshes) {
+        auto &result = meshes.emplace_back();
         glGenVertexArrays(1, &result.vao);
         glBindVertexArray(result.vao);
 
@@ -237,8 +239,7 @@ int main() try
     }
 
     std::map<std::string, GLuint> textures;
-    for (auto const & mesh : meshes)
-    {
+    for (auto const &mesh: meshes) {
         if (!mesh.material.texture_path) continue;
         if (textures.contains(*mesh.material.texture_path)) continue;
 
@@ -270,37 +271,36 @@ int main() try
     float view_angle = glm::pi<float>() / 8.f;
     float camera_distance = 0.75f;
 
-    float camera_rotation = glm::pi<float>() * (- 1.f / 3.f);
+    float camera_rotation = glm::pi<float>() * (-1.f / 3.f);
     float camera_height = 0.25f;
 
     bool paused = false;
 
     bool running = true;
-    while (running)
-    {
-        for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
-        {
-        case SDL_QUIT:
-            running = false;
-            break;
-        case SDL_WINDOWEVENT: switch (event.window.event)
-            {
-            case SDL_WINDOWEVENT_RESIZED:
-                width = event.window.data1;
-                height = event.window.data2;
-                glViewport(0, 0, width, height);
-                break;
+    while (running) {
+        for (SDL_Event event; SDL_PollEvent(&event);)
+            switch (event.type) {
+                case SDL_QUIT:
+                    running = false;
+                    break;
+                case SDL_WINDOWEVENT:
+                    switch (event.window.event) {
+                        case SDL_WINDOWEVENT_RESIZED:
+                            width = event.window.data1;
+                            height = event.window.data2;
+                            glViewport(0, 0, width, height);
+                            break;
+                    }
+                    break;
+                case SDL_KEYDOWN:
+                    button_down[event.key.keysym.sym] = true;
+                    if (event.key.keysym.sym == SDLK_SPACE)
+                        paused = !paused;
+                    break;
+                case SDL_KEYUP:
+                    button_down[event.key.keysym.sym] = false;
+                    break;
             }
-            break;
-        case SDL_KEYDOWN:
-            button_down[event.key.keysym.sym] = true;
-            if (event.key.keysym.sym == SDLK_SPACE)
-                paused = !paused;
-            break;
-        case SDL_KEYUP:
-            button_down[event.key.keysym.sym] = false;
-            break;
-        }
 
         if (!running)
             break;
@@ -336,6 +336,7 @@ int main() try
 
         float near = 0.01f;
         float far = 100.f;
+        float scale = 0.75f + cos(time) * 0.25f;
 
         glm::mat4 model(1.f);
 
@@ -351,16 +352,41 @@ int main() try
 
         glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
+        std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(input_model.bones.size(), glm::mat4x3(scale));
+
+        std::string anim_name = "01_Run";
+        const gltf_model::animation animation = input_model.animations.at(anim_name);
+
+//        for (int i = 0; i < animation.bones.size(); ++i) {
+//            auto translation = glm::translate(glm::mat4(1.f), animation.bones[i].translation(0.f));
+//            auto scaling = glm::scale(glm::mat4(1.f), animation.bones[i].scale(0.f));
+//            auto rotation = glm::toMat4(animation.bones[i].rotation(0.f));
+//            glm::mat4 transform = translation * rotation * scaling;
+//
+//            if (input_model.bones[i].parent != -1) {
+//                int p = input_model.bones[i].parent;
+//                auto p_translation = glm::translate(glm::mat4(1.f), animation.bones[p].translation(0.f));
+//                auto p_scaling = glm::scale(glm::mat4(1.f), animation.bones[p].scale(0.f));
+//                auto p_rotation = glm::toMat4(animation.bones[p].rotation(0.f));
+//                glm::mat4 p_transform = p_translation * p_rotation * p_scaling;
+//
+//                transform = p_transform * transform;
+//            }
+//            bones[i] = transform;
+//        }
+//        for (int i = 0; i < bones.size(); ++i) {
+//            bones[i] = bones[i] * input_model.bones[i].inverse_bind_matrix;
+//        }
+
         glUseProgram(program);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+        glUniformMatrix4x3fv(bones_location, 64, GL_FALSE, reinterpret_cast<float *>(bones.data()));
 
-        auto draw_meshes = [&](bool transparent)
-        {
-            for (auto const & mesh : meshes)
-            {
+        auto draw_meshes = [&](bool transparent) {
+            for (auto const &mesh: meshes) {
                 if (mesh.material.transparent != transparent)
                     continue;
 
@@ -374,21 +400,18 @@ int main() try
                 else
                     glDisable(GL_BLEND);
 
-                if (mesh.material.texture_path)
-                {
+                if (mesh.material.texture_path) {
                     glBindTexture(GL_TEXTURE_2D, textures[*mesh.material.texture_path]);
                     glUniform1i(use_texture_location, 1);
-                }
-                else if (mesh.material.color)
-                {
+                } else if (mesh.material.color) {
                     glUniform1i(use_texture_location, 0);
                     glUniform4fv(color_location, 1, reinterpret_cast<const float *>(&(*mesh.material.color)));
-                }
-                else
+                } else
                     continue;
 
                 glBindVertexArray(mesh.vao);
-                glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type, reinterpret_cast<void *>(mesh.indices.view.offset));
+                glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
+                               reinterpret_cast<void *>(mesh.indices.view.offset));
             }
         };
 
@@ -403,8 +426,7 @@ int main() try
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
 }
-catch (std::exception const & e)
-{
+catch (std::exception const &e) {
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
 }
