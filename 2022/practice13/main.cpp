@@ -357,26 +357,26 @@ int main() try {
         std::string anim_name = "01_Run";
         const gltf_model::animation animation = input_model.animations.at(anim_name);
 
-//        for (int i = 0; i < animation.bones.size(); ++i) {
-//            auto translation = glm::translate(glm::mat4(1.f), animation.bones[i].translation(0.f));
-//            auto scaling = glm::scale(glm::mat4(1.f), animation.bones[i].scale(0.f));
-//            auto rotation = glm::toMat4(animation.bones[i].rotation(0.f));
-//            glm::mat4 transform = translation * rotation * scaling;
-//
-//            if (input_model.bones[i].parent != -1) {
-//                int p = input_model.bones[i].parent;
-//                auto p_translation = glm::translate(glm::mat4(1.f), animation.bones[p].translation(0.f));
-//                auto p_scaling = glm::scale(glm::mat4(1.f), animation.bones[p].scale(0.f));
-//                auto p_rotation = glm::toMat4(animation.bones[p].rotation(0.f));
-//                glm::mat4 p_transform = p_translation * p_rotation * p_scaling;
-//
-//                transform = p_transform * transform;
-//            }
-//            bones[i] = transform;
-//        }
-//        for (int i = 0; i < bones.size(); ++i) {
-//            bones[i] = bones[i] * input_model.bones[i].inverse_bind_matrix;
-//        }
+        for (int i = 0; i < animation.bones.size(); ++i) {
+            auto translation = glm::translate(glm::mat4(1.f), animation.bones[i].translation(0.f));
+            auto scaling = glm::scale(glm::mat4(1.f), animation.bones[i].scale(0.f));
+            auto rotation = glm::toMat4(animation.bones[i].rotation(0.f));
+            glm::mat4 transform = translation * rotation * scaling;
+
+            if (input_model.bones[i].parent != -1) {
+                int p = input_model.bones[i].parent;
+                auto p_translation = glm::translate(glm::mat4(1.f), animation.bones[p].translation(0.f));
+                auto p_scaling = glm::scale(glm::mat4(1.f), animation.bones[p].scale(0.f));
+                auto p_rotation = glm::toMat4(animation.bones[p].rotation(0.f));
+                glm::mat4 p_transform = p_translation * p_rotation * p_scaling;
+
+                transform = p_transform * transform;
+            }
+            bones[i] = transform;
+        }
+        for (int i = 0; i < bones.size(); ++i) {
+            bones[i] = bones[i] * input_model.bones[i].inverse_bind_matrix;
+        }
 
         glUseProgram(program);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
