@@ -355,23 +355,27 @@ int main() try {
         std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(input_model.bones.size(), glm::mat4x3(scale));
 
         std::string anim_name = "01_Run";
-        auto anim_bones = input_model.animations.at(anim_name).bones;
+        auto animation = input_model.animations.at(anim_name);
 
-        for (int i = 0; i < anim_bones.size(); ++i) {
-            auto bone = anim_bones[i];
-            glm::mat4 translation = glm::translate(glm::mat4(1.f), bone.translation(0.f));
-            glm::mat4 scaling = glm::scale(glm::mat4(1.f), bone.scale(0.f));
-            glm::mat4 rotation = glm::toMat4(bone.rotation(0.f));
+//        float frame = fmod(time / 4, 0.666666687f);
+        float frame = 0.f;
+        for (int i = 0; i < bones.size(); ++i) {
+            auto bone = animation.bones[i];
+            glm::mat4 translation = glm::translate(glm::mat4(1.f), bone.translation(frame));
+            glm::mat4 rotation = glm::toMat4(bone.rotation(frame));
+            glm::mat4 scaling = glm::scale(glm::mat4(1.f), bone.scale(frame));
             glm::mat4 transform = translation * rotation * scaling;
 
-            if (input_model.bones[i].parent != -1) {
-                auto parent = anim_bones[input_model.bones[i].parent];
-                glm::mat4 p_translation = glm::translate(glm::mat4(1.f), parent.translation(0.f));
-                glm::mat4 p_scaling = glm::scale(glm::mat4(1.f), parent.scale(0.f));
-                glm::mat4 p_rotation = glm::toMat4(parent.rotation(0.f));
+            int p = input_model.bones[i].parent;
+            while (p != -1) {
+                auto parent = animation.bones[p];
+                glm::mat4 p_translation = glm::translate(glm::mat4(1.f), parent.translation(frame));
+                glm::mat4 p_rotation = glm::toMat4(parent.rotation(frame));
+                glm::mat4 p_scaling = glm::scale(glm::mat4(1.f), parent.scale(frame));
                 glm::mat4 p_transform = p_translation * p_rotation * p_scaling;
 
                 transform = p_transform * transform;
+                p = input_model.bones[p].parent;
             }
             bones[i] = transform;
         }
@@ -384,7 +388,7 @@ int main() try {
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
-        glUniformMatrix4x3fv(bones_location, 64, GL_FALSE, reinterpret_cast<float *>(bones.data()));
+        glUniformMatrix4x3fv(bones_location, bones.size(), GL_FALSE, reinterpret_cast<float *>(bones.data()));
 
         auto draw_meshes = [&](bool transparent) {
             for (auto const &mesh: meshes) {
