@@ -145,6 +145,10 @@ GLuint create_program(Shaders ... shaders) {
     return result;
 }
 
+float clamp_01(float value) {
+    return fmax(0.f, fmin(1.f, value));
+}
+
 int main() try {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         sdl2_fail("SDL_Init: ");
@@ -273,8 +277,10 @@ int main() try {
 
     float camera_rotation = glm::pi<float>() * (-1.f / 3.f);
     float camera_height = 0.25f;
+    const float animation_speed = 1.f;
 
     bool paused = false;
+    float interpolation = 0.f;
 
     bool running = true;
     while (running) {
@@ -326,6 +332,11 @@ int main() try {
             view_angle -= 2.f * dt;
         if (button_down[SDLK_s])
             view_angle += 2.f * dt;
+        if (button_down[SDLK_LSHIFT])
+            interpolation = clamp_01(interpolation + animation_speed * dt);
+        else
+            interpolation = clamp_01(interpolation - animation_speed * dt);
+
 
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -354,27 +365,31 @@ int main() try {
 
         std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(input_model.bones.size(), glm::mat4x3(scale));
 
-        std::string anim_name = "01_Run";
-        auto animation = input_model.animations.at(anim_name);
+        auto run_animation = input_model.animations.at( "01_Run");
+        auto walk_animation = input_model.animations.at( "02_walk");
 
-        float animation_speed = 0.25;
-        float frame = fmod(time * animation_speed, animation.max_time);
+
+
+
+        float walk_frame = fmod(time * animation_speed, walk_animation.max_time);
+        float run_frame = fmod(time * animation_speed, run_animation.max_time);
+
         for (int i = 0; i < bones.size(); ++i) {
-            auto bone = animation.bones[i];
-            glm::mat4 translation = glm::translate(glm::mat4(1.f), bone.translation(frame));
-            glm::mat4 rotation = glm::toMat4(bone.rotation(frame));
-            glm::mat4 scaling = glm::scale(glm::mat4(1.f), bone.scale(frame));
-            glm::mat4 transform = translation * rotation * scaling;
-
-            int p = input_model.bones[i].parent;
+            glm::mat4 transform = glm::mat4(1.f);
+            int p = i;
             while (p != -1) {
-                auto parent = animation.bones[p];
-                glm::mat4 p_translation = glm::translate(glm::mat4(1.f), parent.translation(frame));
-                glm::mat4 p_rotation = glm::toMat4(parent.rotation(frame));
-                glm::mat4 p_scaling = glm::scale(glm::mat4(1.f), parent.scale(frame));
-                glm::mat4 p_transform = p_translation * p_rotation * p_scaling;
+                auto walk_bone = walk_animation.bones[p];
+                auto run_bone = run_animation.bones[p];
 
-                transform = p_transform * transform;
+                auto t = walk_bone.translation(walk_frame) * (1 - interpolation) + run_bone.translation(run_frame) * interpolation;
+                auto r = walk_bone.rotation(walk_frame) * (1 - interpolation) + run_bone.rotation(run_frame) * interpolation;
+                auto s = walk_bone.scale(walk_frame) * (1 - interpolation) + run_bone.scale(run_frame) * interpolation;
+
+                glm::mat4 translation = glm::translate(glm::mat4(1.f), t);
+                glm::mat4 rotation = glm::toMat4(r);
+                glm::mat4 scaling = glm::scale(glm::mat4(1.f), s);
+                transform = translation * rotation * scaling * transform;
+
                 p = input_model.bones[p].parent;
             }
             bones[i] = transform;
