@@ -357,8 +357,8 @@ int main() try {
         std::string anim_name = "01_Run";
         auto animation = input_model.animations.at(anim_name);
 
-//        float frame = fmod(time / 4, 0.666666687f);
-        float frame = 0.f;
+        float animation_speed = 0.25;
+        float frame = fmod(time * animation_speed, animation.max_time);
         for (int i = 0; i < bones.size(); ++i) {
             auto bone = animation.bones[i];
             glm::mat4 translation = glm::translate(glm::mat4(1.f), bone.translation(frame));
