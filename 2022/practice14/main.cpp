@@ -57,12 +57,14 @@ layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
 layout (location = 2) in vec2 in_texcoord;
 
+layout (location = 3) in vec3 in_instance;
+
 out vec3 normal;
 out vec2 texcoord;
 
 void main()
 {
-    gl_Position = projection * view * model * vec4(in_position, 1.0);
+    gl_Position = projection * view * model * vec4(in_position + in_instance, 1.0);
     normal = mat3(model) * in_normal;
     texcoord = in_texcoord;
 }
@@ -245,6 +247,27 @@ int main() try
     glm::vec3 camera_position{0.f, 1.5f, 3.f};
     float camera_rotation = 0.f;
 
+    std::vector<glm::vec3> instance_translations(32 * 32);
+    for (int i = 0; i < 32; ++i) {
+        for (int j = 0; j < 32; ++j) {
+            instance_translations[i * 32 + j] = {1.f * (i - 16), 0.f, 1.f * (j - 16)};
+        }
+    }
+    GLuint instance_vbo;
+    glGenBuffers(1, &instance_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+    glBufferData(GL_ARRAY_BUFFER, instance_translations.size() * sizeof(glm::vec3), instance_translations.data(), GL_STATIC_DRAW);
+
+    for (auto vao : vaos) {
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo);
+
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribDivisor(3, 1);
+    }
+
+
     bool paused = false;
 
     bool running = true;
@@ -338,37 +361,32 @@ int main() try
         float near = 0.1f;
         float far = 100.f;
 
-        for (int i = -16; i < 16; ++i) {
-            for (int j = -16; j < 16; ++j) {
-                glm::mat4 model(1.f);
-                model = glm::translate(model, {1.f * i, 0.f, 1.f * j});
+        glm::mat4 model(1.f);
 
-                glm::mat4 view(1.f);
-                view = glm::rotate(view, camera_rotation, {0.f, 1.f, 0.f});
-                view = glm::translate(view, -camera_position);
+        glm::mat4 view(1.f);
+        view = glm::rotate(view, camera_rotation, {0.f, 1.f, 0.f});
+        view = glm::translate(view, -camera_position);
 
-                glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
+        glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
 
-                glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+        glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-                glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
+        glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
-                glUseProgram(program);
-                glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-                glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-                glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-                glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+        glUseProgram(program);
+        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
+        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
+        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
 
-                glBindTexture(GL_TEXTURE_2D, texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
 
 
-                {
-                    auto const &mesh = input_model.meshes[0];
-                    glBindVertexArray(vaos[0]);
-                    glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
-                                   reinterpret_cast<void *>(mesh.indices.view.offset));
-                }
-            }
+        {
+            auto const &mesh = input_model.meshes[0];
+            glBindVertexArray(vaos[0]);
+            glDrawElementsInstanced(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
+                           reinterpret_cast<void *>(mesh.indices.view.offset), 32*32);
         }
 
         glEndQuery(GL_TIME_ELAPSED);
