@@ -262,6 +262,8 @@ int main() try
     bool paused = false;
 
     bool running = true;
+
+    int lod_const = 1;
     while (running)
     {
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
@@ -320,6 +322,14 @@ int main() try
         if (button_down[SDLK_UP])
             camera_position.y += 3.f * dt;
 
+
+        if (button_down[SDLK_MINUS])
+            lod_const = std::max(1, lod_const - 1);
+        if (button_down[SDLK_EQUALS])
+            lod_const = std::min(15, lod_const + 1);
+
+
+
         camera_position += camera_move_forward * glm::vec3(-std::sin(camera_rotation), 0.f, std::cos(camera_rotation));
         camera_position += camera_move_sideways * glm::vec3(std::cos(camera_rotation), 0.f, std::sin(camera_rotation));
 
@@ -365,20 +375,20 @@ int main() try
         glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
 
-        std::vector<glm::vec3> instances;
+        std::vector<glm::vec3> instances[6];
         frustum frustum(projection * view);
 
-        for (int i = 0; i < 32; ++i) {
-            for (int j = 0; j < 32; ++j) {
-                aabb aabb(input_model.meshes[0].min + glm::vec3({1.f * (i - 16), 0.f, 1.f * (j - 16)}),
-                          input_model.meshes[0].max + glm::vec3({1.f * (i - 16), 0.f, 1.f * (j - 16)}));
-                if (intersect(aabb, frustum)) {
-                    instances.push_back({1.f * (i - 16), 0.f, 1.f * (j - 16)});
+            for (int i = 0; i < 32; ++i) {
+                for (int j = 0; j < 32; ++j) {
+                    glm::vec3 translation = {1.f * (i - 16), 0.f, 1.f * (j - 16)};
+                    aabb aabb(input_model.meshes[0].min + translation,
+                              input_model.meshes[0].max + translation);
+                    if (intersect(aabb, frustum)) {
+                        int lod = std::max(0, std::min(5, (int)std::round(glm::distance(translation, camera_position) / lod_const)));
+                        instances[lod].push_back(translation);
+                    }
                 }
             }
-        }
-        glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-        glBufferData(GL_ARRAY_BUFFER, instances.size() * sizeof(glm::vec3), instances.data(), GL_STATIC_DRAW);
 
 
         glUseProgram(program);
@@ -389,11 +399,14 @@ int main() try
 
         glBindTexture(GL_TEXTURE_2D, texture);
 
+        for (int lod = 0; lod < 6; ++lod)
         {
-            auto const &mesh = input_model.meshes[0];
-            glBindVertexArray(vaos[0]);
+            auto const &mesh = input_model.meshes[lod];
+            glBindVertexArray(vaos[lod]);
+            glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+            glBufferData(GL_ARRAY_BUFFER, instances[lod].size() * sizeof(glm::vec3), instances[lod].data(), GL_STATIC_DRAW);
             glDrawElementsInstanced(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
-                                    reinterpret_cast<void *>(mesh.indices.view.offset), instances.size());
+                                    reinterpret_cast<void *>(mesh.indices.view.offset), instances[lod].size());
         }
 
         glEndQuery(GL_TIME_ELAPSED);
@@ -412,7 +425,7 @@ int main() try
             glGetQueryObjectiv(queries[query_i], GL_QUERY_RESULT, &result);
             std::cout << "query " << queries[query_i] << ": " << result / 1e6f << " ms passed\n";
         }
-        std::cout << "Objects drawn: " << instances.size() << std::endl;
+        std::cout << "Objects drawn: " << instances[5].size() << std::endl;
     }
 
     SDL_GL_DeleteContext(gl_context);
