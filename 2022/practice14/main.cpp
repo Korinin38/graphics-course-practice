@@ -338,30 +338,37 @@ int main() try
         float near = 0.1f;
         float far = 100.f;
 
-        glm::mat4 model(1.f);
+        for (int i = -16; i < 16; ++i) {
+            for (int j = -16; j < 16; ++j) {
+                glm::mat4 model(1.f);
+                model = glm::translate(model, {1.f * i, 0.f, 1.f * j});
 
-        glm::mat4 view(1.f);
-        view = glm::rotate(view, camera_rotation, {0.f, 1.f, 0.f});
-        view = glm::translate(view, -camera_position);
+                glm::mat4 view(1.f);
+                view = glm::rotate(view, camera_rotation, {0.f, 1.f, 0.f});
+                view = glm::translate(view, -camera_position);
 
-        glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
+                glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
 
-        glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+                glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-        glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
+                glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
-        glUseProgram(program);
-        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+                glUseProgram(program);
+                glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
+                glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+                glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
 
-        glBindTexture(GL_TEXTURE_2D, texture);
+                glBindTexture(GL_TEXTURE_2D, texture);
 
-        {
-            auto const & mesh = input_model.meshes[0];
-            glBindVertexArray(vaos[0]);
-            glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type, reinterpret_cast<void *>(mesh.indices.view.offset));
+
+                {
+                    auto const &mesh = input_model.meshes[0];
+                    glBindVertexArray(vaos[0]);
+                    glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
+                                   reinterpret_cast<void *>(mesh.indices.view.offset));
+                }
+            }
         }
 
         glEndQuery(GL_TIME_ELAPSED);
@@ -373,11 +380,11 @@ int main() try
                 continue;
 
             GLint result;
-            glGetQueryObjectiv(query_i, GL_QUERY_RESULT_AVAILABLE, &result);
+            glGetQueryObjectiv(queries[query_i], GL_QUERY_RESULT_AVAILABLE, &result);
             if (result == GL_FALSE)
                 continue;
             query_free[query_i] = true;
-            glGetQueryObjectiv(query_i, GL_QUERY_RESULT, &result);
+            glGetQueryObjectiv(queries[query_i], GL_QUERY_RESULT, &result);
             std::cout << "query " << queries[query_i] << ": " << result / 1e6f << " ms passed\n";
         }
         std::cout << std::flush;
