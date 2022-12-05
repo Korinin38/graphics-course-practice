@@ -184,6 +184,9 @@ int main() try
     const std::string project_root = PROJECT_ROOT;
     const std::string model_path = project_root + "/bunny/bunny.gltf";
 
+    std::vector<GLuint> queries;
+    std::vector<bool> query_free;
+
     auto const input_model = load_gltf(model_path);
     GLuint vbo;
     glGenBuffers(1, &vbo);
@@ -306,6 +309,25 @@ int main() try
         camera_position += camera_move_forward * glm::vec3(-std::sin(camera_rotation), 0.f, std::cos(camera_rotation));
         camera_position += camera_move_sideways * glm::vec3(std::cos(camera_rotation), 0.f, std::sin(camera_rotation));
 
+        // check if free query object exists
+        int query_i;
+        GLuint free_qid = -1;
+        for (query_i = 0; query_i < queries.size(); ++query_i) {
+            if (query_free[query_i]) {
+                free_qid = query_i;
+                break;
+            }
+        }
+        if (free_qid == -1) {
+            query_i = queries.size();
+            queries.push_back(query_i);
+            query_free.push_back(true);
+            glGenQueries(1, &queries[query_i]);
+            free_qid = query_i;
+        }
+        query_free[free_qid] = false;
+        glBeginQuery(GL_TIME_ELAPSED, queries[free_qid]);
+
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -342,7 +364,23 @@ int main() try
             glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type, reinterpret_cast<void *>(mesh.indices.view.offset));
         }
 
+        glEndQuery(GL_TIME_ELAPSED);
         SDL_GL_SwapWindow(window);
+
+        for (query_i = 0; query_i < queries.size(); ++query_i) {
+            std::cout << queries.size() << "\n";
+            if (query_free[query_i])
+                continue;
+
+            GLint result;
+            glGetQueryObjectiv(query_i, GL_QUERY_RESULT_AVAILABLE, &result);
+            if (result == GL_FALSE)
+                continue;
+            query_free[query_i] = true;
+            glGetQueryObjectiv(query_i, GL_QUERY_RESULT, &result);
+            std::cout << "query " << queries[query_i] << ": " << result / 1e6f << " ms passed\n";
+        }
+        std::cout << std::flush;
     }
 
     SDL_GL_DeleteContext(gl_context);
