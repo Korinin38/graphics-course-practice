@@ -238,6 +238,18 @@ int main() try
         stbi_image_free(data);
     }
 
+    GLuint instance_vbo;
+    glGenBuffers(1, &instance_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+
+    for (auto vao : vaos) {
+        glBindVertexArray(vao);
+
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribDivisor(3, 1);
+    }
+
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
     float time = 0.f;
@@ -246,27 +258,6 @@ int main() try
 
     glm::vec3 camera_position{0.f, 1.5f, 3.f};
     float camera_rotation = 0.f;
-
-    std::vector<glm::vec3> instance_translations(32 * 32);
-    for (int i = 0; i < 32; ++i) {
-        for (int j = 0; j < 32; ++j) {
-            instance_translations[i * 32 + j] = {1.f * (i - 16), 0.f, 1.f * (j - 16)};
-        }
-    }
-    GLuint instance_vbo;
-    glGenBuffers(1, &instance_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
-    glBufferData(GL_ARRAY_BUFFER, instance_translations.size() * sizeof(glm::vec3), instance_translations.data(), GL_STATIC_DRAW);
-
-    for (auto vao : vaos) {
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo);
-
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-        glVertexAttribDivisor(3, 1);
-    }
-
 
     bool paused = false;
 
@@ -373,6 +364,23 @@ int main() try
 
         glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
+
+        std::vector<glm::vec3> instances;
+        frustum frustum(projection * view);
+
+        for (int i = 0; i < 32; ++i) {
+            for (int j = 0; j < 32; ++j) {
+                aabb aabb(input_model.meshes[0].min + glm::vec3({1.f * (i - 16), 0.f, 1.f * (j - 16)}),
+                          input_model.meshes[0].max + glm::vec3({1.f * (i - 16), 0.f, 1.f * (j - 16)}));
+                if (intersect(aabb, frustum)) {
+                    instances.push_back({1.f * (i - 16), 0.f, 1.f * (j - 16)});
+                }
+            }
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+        glBufferData(GL_ARRAY_BUFFER, instances.size() * sizeof(glm::vec3), instances.data(), GL_STATIC_DRAW);
+
+
         glUseProgram(program);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
@@ -381,12 +389,11 @@ int main() try
 
         glBindTexture(GL_TEXTURE_2D, texture);
 
-
         {
             auto const &mesh = input_model.meshes[0];
             glBindVertexArray(vaos[0]);
             glDrawElementsInstanced(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
-                           reinterpret_cast<void *>(mesh.indices.view.offset), 32*32);
+                                    reinterpret_cast<void *>(mesh.indices.view.offset), instances.size());
         }
 
         glEndQuery(GL_TIME_ELAPSED);
@@ -405,7 +412,7 @@ int main() try
             glGetQueryObjectiv(queries[query_i], GL_QUERY_RESULT, &result);
             std::cout << "query " << queries[query_i] << ": " << result / 1e6f << " ms passed\n";
         }
-        std::cout << std::flush;
+        std::cout << "Objects drawn: " << instances.size() << std::endl;
     }
 
     SDL_GL_DeleteContext(gl_context);
