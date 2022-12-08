@@ -46,44 +46,63 @@ void glew_fail(std::string_view message, GLenum error) {
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
-GLuint create_shader(GLenum type, const char *source) {
-    GLuint result = glCreateShader(type);
-    glShaderSource(result, 1, &source, nullptr);
-    glCompileShader(result);
-    GLint status;
-    glGetShaderiv(result, GL_COMPILE_STATUS, &status);
-    if (status != GL_TRUE) {
-        GLint info_log_length;
-        glGetShaderiv(result, GL_INFO_LOG_LENGTH, &info_log_length);
-        std::string info_log(info_log_length, '\0');
-        glGetShaderInfoLog(result, info_log.size(), nullptr, info_log.data());
-        throw std::runtime_error("Shader compilation failed: " + info_log);
-    }
-    return result;
-}
+GLuint load_texture2D(std::string const &path) {
+    int width, height, channels;
+    auto pixels = stbi_load(path.data(), &width, &height, &channels, 4);
 
-template<typename ... Shaders>
-GLuint create_program(Shaders ... shaders) {
-    GLuint result = glCreateProgram();
-    (glAttachShader(result, shaders), ...);
-    glLinkProgram(result);
+    GLuint result;
+    glGenTextures(1, &result);
+    glBindTexture(GL_TEXTURE_2D, result);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
-    GLint status;
-    glGetProgramiv(result, GL_LINK_STATUS, &status);
-    if (status != GL_TRUE) {
-        GLint info_log_length;
-        glGetProgramiv(result, GL_INFO_LOG_LENGTH, &info_log_length);
-        std::string info_log(info_log_length, '\0');
-        glGetProgramInfoLog(result, info_log.size(), nullptr, info_log.data());
-        throw std::runtime_error("Program linkage failed: " + info_log);
-    }
+    stbi_image_free(pixels);
 
     return result;
 }
 
-float clamp_01(float value) {
-    return fmax(0.f, fmin(1.f, value));
+struct vertex {
+    glm::vec3 position;
+    glm::vec3 tangent;
+    glm::vec3 normal;
+    glm::vec2 texcoord;
+};
+
+std::pair<std::vector<vertex>, std::vector<std::uint32_t>> generate_sphere(float radius, int quality) {
+    std::vector<vertex> vertices;
+
+    for (int latitude = -quality; latitude <= quality; ++latitude) {
+        for (int longitude = 0; longitude <= 4 * quality; ++longitude) {
+            float lat = (latitude * glm::pi<float>()) / (2.f * quality);
+            float lon = (longitude * glm::pi<float>()) / (2.f * quality);
+
+            auto &vertex = vertices.emplace_back();
+            vertex.normal = {std::cos(lat) * std::cos(lon), std::sin(lat), std::cos(lat) * std::sin(lon)};
+            vertex.position = vertex.normal * radius;
+            vertex.tangent = {-std::cos(lat) * std::sin(lon), 0.f, std::cos(lat) * std::cos(lon)};
+            vertex.texcoord.x = (longitude * 1.f) / (4.f * quality);
+            vertex.texcoord.y = (latitude * 1.f) / (2.f * quality) + 0.5f;
+        }
+    }
+
+    std::vector<std::uint32_t> indices;
+
+    for (int latitude = 0; latitude < 2 * quality; ++latitude) {
+        for (int longitude = 0; longitude < 4 * quality; ++longitude) {
+            std::uint32_t i0 = (latitude + 0) * (4 * quality + 1) + (longitude + 0);
+            std::uint32_t i1 = (latitude + 1) * (4 * quality + 1) + (longitude + 0);
+            std::uint32_t i2 = (latitude + 0) * (4 * quality + 1) + (longitude + 1);
+            std::uint32_t i3 = (latitude + 1) * (4 * quality + 1) + (longitude + 1);
+
+            indices.insert(indices.end(), {i0, i1, i2, i2, i1, i3});
+        }
+    }
+
+    return {std::move(vertices), std::move(indices)};
 }
+
 
 int main() try {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -122,92 +141,116 @@ int main() try {
     if (!GLEW_VERSION_3_3)
         throw std::runtime_error("OpenGL 3.3 is not supported");
 
-
-    std::string vertex_shader_source = readFile("shaders/debug.vert");
-    std::string fragment_shader_source = readFile("shaders/debug.frag");
-    auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source);
-    auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
-    auto program = create_program(vertex_shader, fragment_shader);
-
-    GLuint model_location = glGetUniformLocation(program, "model");
-    GLuint view_location = glGetUniformLocation(program, "view");
-    GLuint projection_location = glGetUniformLocation(program, "projection");
-    GLuint albedo_location = glGetUniformLocation(program, "albedo");
-    GLuint color_location = glGetUniformLocation(program, "color");
-    GLuint use_texture_location = glGetUniformLocation(program, "use_texture");
-    GLuint light_direction_location = glGetUniformLocation(program, "light_direction");
-    GLuint bones_location = glGetUniformLocation(program, "bones");
-
     const std::string project_root = PROJECT_ROOT;
-    const std::string model_path = project_root + "/wolf/Wolf-Blender-2.82a.gltf";
 
-    auto const input_model = load_gltf(model_path);
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, input_model.buffer.size(), input_model.buffer.data(), GL_STATIC_DRAW);
+    // Environment
+    std::string sky_vertex_shader_source = readFile(project_root +"/shaders/environment.vert");
+    std::string sky_fragment_shader_source = readFile(project_root +"/shaders/environment.frag");
+    auto sky_vertex_shader = create_shader(GL_VERTEX_SHADER, sky_vertex_shader_source.data());
+    auto sky_fragment_shader = create_shader(GL_FRAGMENT_SHADER, sky_fragment_shader_source.data());
+    auto sky_program = create_program(sky_vertex_shader, sky_fragment_shader);
+    auto sky_locations = getLocations(sky_program, {"view_projection_inverse",
+                                                    "environment_map",
+                                                    "camera_position",
+                                                    "brightness"});
+    GLuint skybox_vao;
+    glGenVertexArrays(1, &skybox_vao);
+    GLuint environment_map = load_texture2D(project_root + "/external/environment_map.jpg");
 
-    struct mesh {
-        GLuint vao;
-        gltf_model::accessor indices;
-        gltf_model::material material;
-    };
 
-    auto setup_attribute = [](int index, gltf_model::accessor const &accessor, bool integer = false) {
-        glEnableVertexAttribArray(index);
-        if (integer)
-            glVertexAttribIPointer(index, accessor.size, accessor.type, 0,
-                                   reinterpret_cast<void *>(accessor.view.offset));
-        else
-            glVertexAttribPointer(index, accessor.size, accessor.type, GL_FALSE, 0,
-                                  reinterpret_cast<void *>(accessor.view.offset));
-    };
+    // ?
+//    std::string vertex_shader_source = readFile("shaders/debug.vert");
+//    std::string fragment_shader_source = readFile("shaders/debug.frag");
+//    auto vertex_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_source.c_str());
+//    auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source.c_str());
+//    auto program = create_program(vertex_shader, fragment_shader);
+//
+//    GLuint model_location = glGetUniformLocation(program, "model");
+//    GLuint view_location = glGetUniformLocation(program, "view");
+//    GLuint projection_location = glGetUniformLocation(program, "projection");
+//    GLuint albedo_location = glGetUniformLocation(program, "albedo");
+//    GLuint color_location = glGetUniformLocation(program, "color");
+//    GLuint use_texture_location = glGetUniformLocation(program, "use_texture");
+//    GLuint light_direction_location = glGetUniformLocation(program, "light_direction");
+//    GLuint bones_location = glGetUniformLocation(program, "bones");
+//
+//    const std::string model_path = project_root + "/wolf/Wolf-Blender-2.82a.gltf";
+//
+//    auto const input_model = load_gltf(model_path);
+//    GLuint vbo;
+//    glGenBuffers(1, &vbo);
+//    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+//    glBufferData(GL_ARRAY_BUFFER, input_model.buffer.size(), input_model.buffer.data(), GL_STATIC_DRAW);
+//
+//    struct mesh {
+//        GLuint vao;
+//        gltf_model::accessor indices;
+//        gltf_model::material material;
+//    };
+//
+//    auto setup_attribute = [](int index, gltf_model::accessor const &accessor, bool integer = false) {
+//        glEnableVertexAttribArray(index);
+//        if (integer)
+//            glVertexAttribIPointer(index, accessor.size, accessor.type, 0,
+//                                   reinterpret_cast<void *>(accessor.view.offset));
+//        else
+//            glVertexAttribPointer(index, accessor.size, accessor.type, GL_FALSE, 0,
+//                                  reinterpret_cast<void *>(accessor.view.offset));
+//    };
+//
+//    std::vector<mesh> meshes;
+//    for (auto const &mesh: input_model.meshes) {
+//        auto &result = meshes.emplace_back();
+//        glGenVertexArrays(1, &result.vao);
+//        glBindVertexArray(result.vao);
+//
+//        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo);
+//        result.indices = mesh.indices;
+//
+//        setup_attribute(0, mesh.position);
+//        setup_attribute(1, mesh.normal);
+//        setup_attribute(2, mesh.texcoord);
+//        setup_attribute(3, mesh.joints, true);
+//        setup_attribute(4, mesh.weights);
+//
+//        result.material = mesh.material;
+//    }
+//
+//    std::map<std::string, GLuint> textures;
+//    for (auto const &mesh: meshes) {
+//        if (!mesh.material.texture_path) continue;
+//        if (textures.contains(*mesh.material.texture_path)) continue;
+//
+//        auto path = std::filesystem::path(model_path).parent_path() / *mesh.material.texture_path;
+//
+//        int texture_width, texture_height, channels;
+//        auto data = stbi_load(path.c_str(), &texture_width, &texture_height, &channels, 4);
+//        assert(data);
+//
+//        GLuint texture;
+//        glGenTextures(1, &texture);
+//        glBindTexture(GL_TEXTURE_2D, texture);
+//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+//        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texture_width, texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+//        glGenerateMipmap(GL_TEXTURE_2D);
+//
+//        stbi_image_free(data);
+//
+//        textures[*mesh.material.texture_path] = texture;
+//    }
 
-    std::vector<mesh> meshes;
-    for (auto const &mesh: input_model.meshes) {
-        auto &result = meshes.emplace_back();
-        glGenVertexArrays(1, &result.vao);
-        glBindVertexArray(result.vao);
+    // Assigning some textures to fixed texture units
+    const int sky_sampler = 1;
+    glActiveTexture(GL_TEXTURE0 + sky_sampler);
+    glBindTexture(GL_TEXTURE_2D, environment_map);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo);
-        result.indices = mesh.indices;
-
-        setup_attribute(0, mesh.position);
-        setup_attribute(1, mesh.normal);
-        setup_attribute(2, mesh.texcoord);
-        setup_attribute(3, mesh.joints, true);
-        setup_attribute(4, mesh.weights);
-
-        result.material = mesh.material;
-    }
-
-    std::map<std::string, GLuint> textures;
-    for (auto const &mesh: meshes) {
-        if (!mesh.material.texture_path) continue;
-        if (textures.contains(*mesh.material.texture_path)) continue;
-
-        auto path = std::filesystem::path(model_path).parent_path() / *mesh.material.texture_path;
-
-        int texture_width, texture_height, channels;
-        auto data = stbi_load(path.c_str(), &texture_width, &texture_height, &channels, 4);
-        assert(data);
-
-        GLuint texture;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texture_width, texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        stbi_image_free(data);
-
-        textures[*mesh.material.texture_path] = texture;
-    }
-
+    // In-loop variables
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
     float time = 0.f;
+    float brightness = 0.8f;
+    const float brightness_speed = 0.7f;
 
     std::map<SDL_Keycode, bool> button_down;
 
@@ -272,9 +315,14 @@ int main() try {
         if (button_down[SDLK_s])
             view_angle += 2.f * dt;
         if (button_down[SDLK_LSHIFT])
-            interpolation = clamp_01(interpolation + animation_speed * dt);
+            interpolation = clamp(interpolation + animation_speed * dt);
         else
-            interpolation = clamp_01(interpolation - animation_speed * dt);
+            interpolation = clamp(interpolation - animation_speed * dt);
+        if (button_down[SDLK_MINUS])
+            brightness = clamp(brightness - brightness_speed * dt, 0.1f, 1.f);
+        if (button_down[SDLK_EQUALS])
+            brightness = clamp(brightness + brightness_speed * dt, 0.1f, 1.f);
+
 
 
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
@@ -302,49 +350,64 @@ int main() try {
 
         glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
-        std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(input_model.bones.size(), glm::mat4x3(scale));
+//        std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(input_model.bones.size(), glm::mat4x3(scale));
 
-        glUseProgram(program);
-        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
-        glUniformMatrix4x3fv(bones_location, bones.size(), GL_FALSE, reinterpret_cast<float *>(bones.data()));
+        glm::mat4 view_projection_inverse = glm::inverse( projection * view);
 
-        auto draw_meshes = [&](bool transparent) {
-            for (auto const &mesh: meshes) {
-                if (mesh.material.transparent != transparent)
-                    continue;
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
 
-                if (mesh.material.two_sided)
-                    glDisable(GL_CULL_FACE);
-                else
-                    glEnable(GL_CULL_FACE);
+        glUseProgram(sky_program);
+        glUniform3fv(sky_locations["camera_position"], 1, reinterpret_cast<float *>(&camera_position));
+        glUniformMatrix4fv(sky_locations["view_projection_inverse"], 1, GL_FALSE, reinterpret_cast<float *>(&view_projection_inverse));
+        glUniform1i(sky_locations["environment_map"], sky_sampler);
+        glUniform1f(sky_locations["brightness"], brightness);
 
-                if (transparent)
-                    glEnable(GL_BLEND);
-                else
-                    glDisable(GL_BLEND);
+        glBindVertexArray(skybox_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
-                if (mesh.material.texture_path) {
-                    glBindTexture(GL_TEXTURE_2D, textures[*mesh.material.texture_path]);
-                    glUniform1i(use_texture_location, 1);
-                } else if (mesh.material.color) {
-                    glUniform1i(use_texture_location, 0);
-                    glUniform4fv(color_location, 1, reinterpret_cast<const float *>(&(*mesh.material.color)));
-                } else
-                    continue;
 
-                glBindVertexArray(mesh.vao);
-                glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
-                               reinterpret_cast<void *>(mesh.indices.view.offset));
-            }
-        };
-
-        draw_meshes(false);
-        glDepthMask(GL_FALSE);
-        draw_meshes(true);
-        glDepthMask(GL_TRUE);
+//        glUseProgram(program);
+//        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
+//        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
+//        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+//        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+//        glUniformMatrix4x3fv(bones_location, bones.size(), GL_FALSE, reinterpret_cast<float *>(bones.data()));
+//
+//        auto draw_meshes = [&](bool transparent) {
+//            for (auto const &mesh: meshes) {
+//                if (mesh.material.transparent != transparent)
+//                    continue;
+//
+//                if (mesh.material.two_sided)
+//                    glDisable(GL_CULL_FACE);
+//                else
+//                    glEnable(GL_CULL_FACE);
+//
+//                if (transparent)
+//                    glEnable(GL_BLEND);
+//                else
+//                    glDisable(GL_BLEND);
+//
+//                if (mesh.material.texture_path) {
+//                    glBindTexture(GL_TEXTURE_2D, textures[*mesh.material.texture_path]);
+//                    glUniform1i(use_texture_location, 1);
+//                } else if (mesh.material.color) {
+//                    glUniform1i(use_texture_location, 0);
+//                    glUniform4fv(color_location, 1, reinterpret_cast<const float *>(&(*mesh.material.color)));
+//                } else
+//                    continue;
+//
+//                glBindVertexArray(mesh.vao);
+//                glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type,
+//                               reinterpret_cast<void *>(mesh.indices.view.offset));
+//            }
+//        };
+//
+//        draw_meshes(false);
+//        glDepthMask(GL_FALSE);
+//        draw_meshes(true);
+//        glDepthMask(GL_TRUE);
 
         SDL_GL_SwapWindow(window);
     }
