@@ -53,10 +53,17 @@ std::pair<std::vector<vertex>, std::vector<std::uint32_t>> generate_sphere(float
             vertex.texcoord.y = (latitude * 1.f) / (2.f * quality) + 0.5f;
         }
     }
+    auto &centre = vertices.emplace_back();
+    centre.normal = {0.f, 1.f, 0.f};
+    centre.position = glm::vec3(0.f);
+    centre.tangent = glm::vec3(0.f);
+    centre.texcoord.x = quality / (4.f * quality);
+    centre.texcoord.y = quality / (4.f * quality);
+    std::uint32_t centre_index = vertices.size() - 1;
 
     std::vector<std::uint32_t> indices;
 
-    for (int latitude = 0; latitude < (hemisphere ? 1 : 2)* quality; ++latitude) {
+    for (int latitude = 0; latitude < (hemisphere ? 1 : 2) * quality; ++latitude) {
         for (int longitude = 0; longitude < 4 * quality; ++longitude) {
             std::uint32_t i0 = (latitude + 0) * (4 * quality + 1) + (longitude + 0);
             std::uint32_t i1 = (latitude + 1) * (4 * quality + 1) + (longitude + 0);
@@ -69,6 +76,13 @@ std::pair<std::vector<vertex>, std::vector<std::uint32_t>> generate_sphere(float
     if (!hemisphere)
         return {std::move(vertices), std::move(indices)};
 
+    for (int longitude = 0; longitude < 4 * quality; ++longitude) {
+        std::uint32_t i0 = quality * (4 * quality + 1) + (longitude + 0);
+        std::uint32_t i1 = quality * (4 * quality + 1) + (longitude + 1);
+
+        indices.insert(indices.end(), {i0, i1, centre_index});
+    }
+    return {std::move(vertices), std::move(indices)};
 }
 
 

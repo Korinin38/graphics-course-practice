@@ -135,24 +135,45 @@ int main() try {
         wolf_textures[*mesh.material.texture_path] = load_texture2D(path);
     }
 
-    // Sphere
-//    GLuint sphere_vao, sphere_vbo, sphere_ebo;
-//    glGenVertexArrays(1, &sphere_vao);
-//    glBindVertexArray(sphere_vao);
-//    glGenBuffers(1, &sphere_vbo);
-//    glGenBuffers(1, &sphere_ebo);
-//    GLuint sphere_index_count;
-//    {
-//        auto [vertices, indices] = generate_sphere(1.f, 16);
-//
-//        glBindBuffer(GL_ARRAY_BUFFER, sphere_vbo);
-//        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
-//
-//        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphere_ebo);
-//        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(indices[0]), indices.data(), GL_STATIC_DRAW);
-//
-//        sphere_index_count = indices.size();
-//    }
+    // Snow
+    programs["snow"] = create_program(project_root + "/shaders/", "snow");
+
+    auto snow_locations = getLocations(programs["snow"], {"model",
+                                                              "view",
+                                                              "projection",
+                                                              "normal_texture",
+                                                              "reflection_map",
+                                                              "light_direction",
+                                                              "camera_position",
+                                                              "brightness"});
+
+    GLuint snow_vao, snow_vbo, snow_ebo;
+    glGenVertexArrays(1, &snow_vao);
+    glBindVertexArray(snow_vao);
+    glGenBuffers(1, &snow_vbo);
+    glGenBuffers(1, &snow_ebo);
+    GLuint snow_index_count;
+    {
+        auto [vertices, indices] = generate_sphere(1.f, 16, true);
+
+        glBindBuffer(GL_ARRAY_BUFFER, snow_vbo);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, position));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, tangent));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, normal));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, texcoord));
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, snow_ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(indices[0]), indices.data(), GL_STATIC_DRAW);
+
+        snow_index_count = indices.size();
+    }
+    GLuint snow_normal = load_texture2D(project_root + "/external/snow_normal.png");
 
     // Assigning some wolf_textures to fixed texture units
     const int sky_sampler = 1;
@@ -160,6 +181,9 @@ int main() try {
     glBindTexture(GL_TEXTURE_2D, environment_map);
 
     const int wolf_sampler = 2;
+    const int snow_sampler = 3;
+    glActiveTexture(GL_TEXTURE0 + snow_sampler);
+    glBindTexture(GL_TEXTURE_2D, snow_normal);
 
     // In-loop variables
     auto last_frame_start = std::chrono::high_resolution_clock::now();
@@ -252,6 +276,10 @@ int main() try {
         float scale = 0.75f + cos(time) * 0.25f;
 
         glm::mat4 model(1.f);
+        glm::mat4 wolf_model_mat(1.f);
+        wolf_model_mat = glm::rotate (wolf_model_mat, -time, {0.f, 1.f, 0.f});
+        wolf_model_mat = glm::translate (wolf_model_mat, {0.7f, 0.f, 0.f});
+        wolf_model_mat = glm::scale(wolf_model_mat, glm::vec3(0.6f));
 
         glm::mat4 view(1.f);
         view = glm::translate(view, {0.f, 0.f, -camera_distance});
@@ -267,8 +295,8 @@ int main() try {
 
         std::vector<glm::mat4x3> bones = std::vector<glm::mat4x3>(wolf_model.bones.size(), glm::mat4x3(scale));
 
-        auto run_animation = wolf_model.animations.at( "01_Run");
-        auto walk_animation = wolf_model.animations.at( "02_walk");
+        auto run_animation = wolf_model.animations.at("01_Run");
+        auto walk_animation = wolf_model.animations.at("02_walk");
 
         float walk_frame = fmod(time * animation_speed, walk_animation.max_time);
         float run_frame = fmod(time * animation_speed, run_animation.max_time);
@@ -280,8 +308,10 @@ int main() try {
                 auto walk_bone = walk_animation.bones[p];
                 auto run_bone = run_animation.bones[p];
 
-                auto t = walk_bone.translation(walk_frame) * (1 - interpolation) + run_bone.translation(run_frame) * interpolation;
-                auto r = walk_bone.rotation(walk_frame) * (1 - interpolation) + run_bone.rotation(run_frame) * interpolation;
+                auto t = walk_bone.translation(walk_frame) * (1 - interpolation) +
+                         run_bone.translation(run_frame) * interpolation;
+                auto r = walk_bone.rotation(walk_frame) * (1 - interpolation) +
+                         run_bone.rotation(run_frame) * interpolation;
                 auto s = walk_bone.scale(walk_frame) * (1 - interpolation) + run_bone.scale(run_frame) * interpolation;
 
                 glm::mat4 translation = glm::translate(glm::mat4(1.f), t);
@@ -318,7 +348,7 @@ int main() try {
         glEnable(GL_CULL_FACE);
 
         glUseProgram(programs["wolf"]);
-        glUniformMatrix4fv(wolf_locations["model"], 1, GL_FALSE, reinterpret_cast<float *>(&model));
+        glUniformMatrix4fv(wolf_locations["model"], 1, GL_FALSE, reinterpret_cast<float *>(&wolf_model_mat));
         glUniformMatrix4fv(wolf_locations["view"], 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(wolf_locations["projection"], 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(wolf_locations["light_direction"], 1, reinterpret_cast<float *>(&light_direction));
@@ -363,25 +393,22 @@ int main() try {
         glDepthMask(GL_TRUE);
 
 
-//        glUseProgram(program);
-//        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-//        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-//        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-//        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
-//        glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
-//        glUniform1i(albedo_texture_location, 0);
-//        glUniform1i(normal_texture_location, 1);
-//        glUniform1i(reflection_map_location, 2);
-//
-//        glActiveTexture(GL_TEXTURE0);
-//        glBindTexture(GL_TEXTURE_2D, albedo_texture);
-//        glActiveTexture(GL_TEXTURE1);
-//        glBindTexture(GL_TEXTURE_2D, normal_texture);
-//        glActiveTexture(GL_TEXTURE2);
-//        glBindTexture(GL_TEXTURE_2D, environment_map);
-//
-//        glBindVertexArray(sphere_vao);
-//        glDrawElements(GL_TRIANGLES, sphere_index_count, GL_UNSIGNED_INT, nullptr);
+        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+
+        glUseProgram(programs["snow"]);
+        glUniformMatrix4fv(snow_locations["model"], 1, GL_FALSE, reinterpret_cast<float *>(&model));
+        glUniformMatrix4fv(snow_locations["view"], 1, GL_FALSE, reinterpret_cast<float *>(&view));
+        glUniformMatrix4fv(snow_locations["projection"], 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+        glUniform3fv(snow_locations["light_direction"], 1, reinterpret_cast<float *>(&light_direction));
+        glUniform3fv(snow_locations["camera_position"], 1, reinterpret_cast<float *>(&camera_position));
+        glUniform1i(snow_locations["normal_texture"], snow_sampler);
+        glUniform1i(snow_locations["reflection_map"], sky_sampler);
+        glUniform1f(snow_locations["brightness"], brightness);
+
+        glBindVertexArray(snow_vao);
+        glDrawElements(GL_TRIANGLES, snow_index_count, GL_UNSIGNED_INT, nullptr);
+        glDrawElements(GL_LINES, snow_index_count, GL_UNSIGNED_INT, nullptr);
 
         SDL_GL_SwapWindow(window);
     }

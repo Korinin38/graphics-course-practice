@@ -2,10 +2,9 @@
 
 uniform vec3 light_direction;
 uniform vec3 camera_position;
+uniform float brightness;
 
-uniform sampler2D albedo_texture;
 uniform sampler2D normal_texture;
-uniform sampler2D reflection_map;
 
 in vec3 position;
 in vec3 tangent;
@@ -18,7 +17,7 @@ const float PI = 3.141592653589793;
 
 void main()
 {
-    float ambient_light = 0.2;
+    float ambient_light = brightness;
 
     vec3 bitangent = cross (tangent, normal);
     mat3 tbn = mat3(tangent, bitangent, normal);
@@ -33,12 +32,7 @@ void main()
     float y = -atan(dir.y, length(dir.xz)) / PI + 0.5;
 
 
-//    vec3 albedo = texture(albedo_texture, texcoord).rgb;
-    vec3 reflection = texture(reflection_map, vec2(x, y)).rgb;
-    //    vec3 albedo = normal * 0.5 + vec3(0.5);
-    //    vec3 albedo = texture(normal_texture, texcoord).rgb;
-    //    vec3 albedo = real_normal * 0.5 + vec3(0.5);
+    vec3 albedo = vec3(0.8, 0.8, 1.0);
 
-    out_color = vec4(lightness * mix(albedo, reflection, 0.5), 1.0);
-//        out_color = vec4(lightness * reflection, 1.0);
+    out_color = vec4(lightness * albedo, 1.0);
 }
