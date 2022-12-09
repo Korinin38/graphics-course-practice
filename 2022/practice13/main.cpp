@@ -368,9 +368,6 @@ int main() try {
         auto run_animation = input_model.animations.at( "01_Run");
         auto walk_animation = input_model.animations.at( "02_walk");
 
-
-
-
         float walk_frame = fmod(time * animation_speed, walk_animation.max_time);
         float run_frame = fmod(time * animation_speed, run_animation.max_time);
 
