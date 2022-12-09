@@ -144,7 +144,6 @@ int main() try {
                                                               "normal_texture",
                                                               "reflection_map",
                                                               "light_direction",
-                                                              "camera_position",
                                                               "brightness"});
 
     GLuint snow_vao, snow_vbo, snow_ebo;
@@ -401,7 +400,6 @@ int main() try {
         glUniformMatrix4fv(snow_locations["view"], 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(snow_locations["projection"], 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(snow_locations["light_direction"], 1, reinterpret_cast<float *>(&light_direction));
-        glUniform3fv(snow_locations["camera_position"], 1, reinterpret_cast<float *>(&camera_position));
         glUniform1i(snow_locations["normal_texture"], snow_sampler);
         glUniform1i(snow_locations["reflection_map"], sky_sampler);
         glUniform1f(snow_locations["brightness"], brightness);
