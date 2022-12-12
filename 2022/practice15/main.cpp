@@ -2,7 +2,9 @@
 #include <SDL.h>
 #undef main
 #else
+
 #include <SDL2/SDL.h>
+
 #endif
 
 #include <GL/glew.h>
@@ -28,52 +30,68 @@
 #include "msdf_loader.hpp"
 #include "stb_image.h"
 
-std::string to_string(std::string_view str)
-{
+std::string to_string(std::string_view str) {
     return std::string(str.begin(), str.end());
 }
 
-void sdl2_fail(std::string_view message)
-{
+void sdl2_fail(std::string_view message) {
     throw std::runtime_error(to_string(message) + SDL_GetError());
 }
 
-void glew_fail(std::string_view message, GLenum error)
-{
+void glew_fail(std::string_view message, GLenum error) {
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
 const char msdf_vertex_shader_source[] =
 R"(#version 330 core
 
+layout (location = 0) in vec2 position;
+layout (location = 1) in vec2 in_texcoord;
+
 uniform mat4 transform;
+out vec4 color;
+out vec2 texcoord;
 
 void main()
 {
-    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_Position = transform * vec4(position, 0.0, 1.0);
+    color = vec4(texcoord, 0.0, 1.0);
+    texcoord = in_texcoord;
 }
 )";
 
 const char msdf_fragment_shader_source[] =
 R"(#version 330 core
 
+uniform sampler2D sdf_texture;
+uniform float sdf_scale;
+
 layout (location = 0) out vec4 out_color;
+in vec4 color;
+in vec2 texcoord;
+
+float median(vec3 v) {
+    return max(min(v.r, v.g), min(max(v.r, v.g), v.b));
+}
 
 void main()
 {
-    out_color = vec4(0.0);
+    float sdf_value = sdf_scale * (median(texture(sdf_texture, texcoord).rgb) - 0.5);
+
+    float alpha = smoothstep(-0.5, 0.5, sdf_value);
+    out_color = vec4(vec3(0.0), alpha);
+//    out_color = vec4(vec3(0.0), sdf_value);
+//    out_color = vec4(texcoord, 0.0, 1.0);
 }
 )";
 
-GLuint create_shader(GLenum type, const char * source)
-{
+GLuint create_shader(GLenum type, const char *source) {
     GLuint result = glCreateShader(type);
     glShaderSource(result, 1, &source, nullptr);
     glCompileShader(result);
     GLint status;
     glGetShaderiv(result, GL_COMPILE_STATUS, &status);
-    if (status != GL_TRUE)
-    {
+    if (status != GL_TRUE) {
         GLint info_log_length;
         glGetShaderiv(result, GL_INFO_LOG_LENGTH, &info_log_length);
         std::string info_log(info_log_length, '\0');
@@ -83,17 +101,15 @@ GLuint create_shader(GLenum type, const char * source)
     return result;
 }
 
-template <typename ... Shaders>
-GLuint create_program(Shaders ... shaders)
-{
+template<typename ... Shaders>
+GLuint create_program(Shaders ... shaders) {
     GLuint result = glCreateProgram();
     (glAttachShader(result, shaders), ...);
     glLinkProgram(result);
 
     GLint status;
     glGetProgramiv(result, GL_LINK_STATUS, &status);
-    if (status != GL_TRUE)
-    {
+    if (status != GL_TRUE) {
         GLint info_log_length;
         glGetProgramiv(result, GL_INFO_LOG_LENGTH, &info_log_length);
         std::string info_log(info_log_length, '\0');
@@ -104,8 +120,17 @@ GLuint create_program(Shaders ... shaders)
     return result;
 }
 
-int main() try
-{
+struct vertex {
+    glm::vec2 position;
+    glm::vec2 texcoord;
+
+    vertex(glm::vec2 position, glm::vec2 texcoord) {
+        this->position = position;
+        this->texcoord = texcoord;
+    }
+};
+
+int main() try {
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
         sdl2_fail("SDL_Init: ");
 
@@ -118,11 +143,11 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    SDL_Window * window = SDL_CreateWindow("Graphics course practice 15",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        800, 600,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
+    SDL_Window *window = SDL_CreateWindow("Graphics course practice 15",
+                                          SDL_WINDOWPOS_CENTERED,
+                                          SDL_WINDOWPOS_CENTERED,
+                                          800, 600,
+                                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED);
 
     if (!window)
         sdl2_fail("SDL_CreateWindow: ");
@@ -145,11 +170,31 @@ int main() try
     auto msdf_program = create_program(msdf_vertex_shader, msdf_fragment_shader);
 
     GLuint transform_location = glGetUniformLocation(msdf_program, "transform");
+    GLuint scale_location = glGetUniformLocation(msdf_program, "sdf_scale");
 
     const std::string project_root = PROJECT_ROOT;
     const std::string font_path = project_root + "/font/font-msdf.json";
 
     auto const font = load_msdf_font(font_path);
+
+    std::vector<vertex> vertices;
+    vertices.push_back(vertex({0, 0}, {0, 0}));
+    vertices.push_back(vertex({100, 0}, {1, 0}));
+    vertices.push_back(vertex({0, 100}, {0, 1}));
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+//    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *) offsetof(vertex, position));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *) offsetof(vertex, texcoord));
 
     GLuint texture;
     int texture_width, texture_height;
@@ -171,46 +216,46 @@ int main() try
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
     float time = 0.f;
+    glm::vec3 bound_box(0.f);
 
     SDL_StartTextInput();
 
     std::map<SDL_Keycode, bool> button_down;
 
-    std::string text = "Hello, world!";
+    int vert_count = 0;
+    std::string text = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
     bool text_changed = true;
 
     bool running = true;
-    while (running)
-    {
-        for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
-        {
-        case SDL_QUIT:
-            running = false;
-            break;
-        case SDL_WINDOWEVENT: switch (event.window.event)
-            {
-            case SDL_WINDOWEVENT_RESIZED:
-                width = event.window.data1;
-                height = event.window.data2;
-                glViewport(0, 0, width, height);
-                break;
+    while (running) {
+        for (SDL_Event event; SDL_PollEvent(&event);)
+            switch (event.type) {
+                case SDL_QUIT:
+                    running = false;
+                    break;
+                case SDL_WINDOWEVENT:
+                    switch (event.window.event) {
+                        case SDL_WINDOWEVENT_RESIZED:
+                            width = event.window.data1;
+                            height = event.window.data2;
+                            glViewport(0, 0, width, height);
+                            break;
+                    }
+                    break;
+                case SDL_KEYDOWN:
+                    button_down[event.key.keysym.sym] = true;
+                    if (event.key.keysym.sym == SDLK_BACKSPACE && !text.empty()) {
+                        text.pop_back();
+                        text_changed = true;
+                    }
+                    break;
+                case SDL_TEXTINPUT:
+                    text.append(event.text.text);
+                    text_changed = true;
+                case SDL_KEYUP:
+                    button_down[event.key.keysym.sym] = false;
+                    break;
             }
-            break;
-        case SDL_KEYDOWN:
-            button_down[event.key.keysym.sym] = true;
-            if (event.key.keysym.sym == SDLK_BACKSPACE && !text.empty())
-            {
-                text.pop_back();
-                text_changed = true;
-            }
-            break;
-        case SDL_TEXTINPUT:
-            text.append(event.text.text);
-            text_changed = true;
-        case SDL_KEYUP:
-            button_down[event.key.keysym.sym] = false;
-            break;
-        }
 
         if (!running)
             break;
@@ -223,10 +268,56 @@ int main() try
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
+
+        if (text_changed) {
+            glm::vec2 pen(0.f);
+            vertices.clear();
+            for (char c: text) {
+                auto glyph = font.glyphs.at(c);
+                auto v1 = vertex({glyph.xoffset + pen.x, glyph.yoffset + pen.y}, {glyph.x, glyph.y});
+                auto v2 = vertex({glyph.xoffset + pen.x, glyph.yoffset + glyph.height + pen.y},
+                                 {glyph.x, glyph.y + glyph.height});
+                auto v3 = vertex({glyph.xoffset + glyph.width + pen.x, glyph.yoffset + pen.y},
+                                 {glyph.x + glyph.width, glyph.y});
+                auto v4 = vertex({glyph.xoffset + glyph.width + pen.x, glyph.yoffset + glyph.height + pen.y},
+                                 {glyph.x + glyph.width, glyph.y + glyph.height});
+                glm::vec2 d = {texture_width, texture_height};
+                v1.texcoord /= d;
+                v2.texcoord /= d;
+                v3.texcoord /= d;
+                v4.texcoord /= d;
+                vertices.push_back(v1);
+                vertices.push_back(v2);
+                vertices.push_back(v3);
+                vertices.push_back(v3);
+                vertices.push_back(v2);
+                vertices.push_back(v4);
+                pen += glm::vec2{glyph.advance, 0.f};
+                bound_box.x = -pen.x / 2;
+                bound_box.y = fmin(bound_box.y, -(float)glyph.height);
+            }
+            vert_count = vertices.size();
+            text_changed = false;
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+        }
+        glUniform1f(scale_location, font.sdf_scale);
+
+//        std::cout << bound_box.x << " " << bound_box.y << std::endl;
+        glm::mat4 transform(1.f);
+//        transform = glm::translate(transform, glm::vec3({-1.f, 1.f, 0.f}));
+        transform = glm::scale(transform, glm::vec3({2.f / width, -2.f / height, 0.f}));
+        transform = glm::translate(transform, bound_box);
+
+        glUseProgram(msdf_program);
+        glUniformMatrix4fv(transform_location, 1, GL_FALSE, reinterpret_cast<float *>(&transform));
+        glBindVertexArray(vao);
+
+        glDrawArrays(GL_TRIANGLES, 0, vert_count);
 
         SDL_GL_SwapWindow(window);
     }
@@ -234,8 +325,7 @@ int main() try
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
 }
-catch (std::exception const & e)
-{
+catch (std::exception const &e) {
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
 }
