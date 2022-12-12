@@ -53,14 +53,6 @@ std::pair<std::vector<vertex>, std::vector<std::uint32_t>> generate_sphere(float
             vertex.texcoord.y = (latitude * 1.f) / (2.f * quality) + 0.5f;
         }
     }
-    auto &centre = vertices.emplace_back();
-    centre.normal = {0.f, 1.f, 0.f};
-    centre.position = glm::vec3(0.f);
-    centre.tangent = glm::vec3(0.f);
-    centre.texcoord.x = quality / (4.f * quality);
-    centre.texcoord.y = quality / (4.f * quality);
-    std::uint32_t centre_index = vertices.size() - 1;
-
     std::vector<std::uint32_t> indices;
 
     for (int latitude = 0; latitude < (hemisphere ? 1 : 2) * quality; ++latitude) {
@@ -76,9 +68,29 @@ std::pair<std::vector<vertex>, std::vector<std::uint32_t>> generate_sphere(float
     if (!hemisphere)
         return {std::move(vertices), std::move(indices)};
 
+    for (int longitude = 0; longitude <= 4 * quality; ++longitude) {
+        float lat = 0;
+        float lon = (longitude * glm::pi<float>()) / (2.f * quality);
+
+        auto &vertex = vertices.emplace_back();
+        vertex.normal = {0.f, 1.f, 0.f};
+        vertex.position = {std::cos(lat) * std::cos(lon) * radius, std::sin(lat) * radius, std::cos(lat) * std::sin(lon) * radius};
+        vertex.tangent = {0.f, 0.f, 1.f};
+        vertex.texcoord.x = std::cos(lon) + 0.5f;
+        vertex.texcoord.y = std::sin(lon) + 0.5f;
+    }
+
+    auto &centre = vertices.emplace_back();
+    centre.normal = {0.f, 1.f, 0.f};
+    centre.position = glm::vec3(0.f);
+    centre.tangent = glm::vec3(0.f);
+    centre.texcoord.x = 0.5f;
+    centre.texcoord.y = 0.5f;
+    std::uint32_t centre_index = vertices.size() - 1;
+
     for (int longitude = 0; longitude < 4 * quality; ++longitude) {
-        std::uint32_t i0 = quality * (4 * quality + 1) + (longitude + 0);
-        std::uint32_t i1 = quality * (4 * quality + 1) + (longitude + 1);
+        std::uint32_t i0 = (quality + 1) * (4 * quality + 1) + (longitude + 1);
+        std::uint32_t i1 = (quality + 1) * (4 * quality + 1) + (longitude + 0);
 
         indices.insert(indices.end(), {i0, i1, centre_index});
     }
@@ -200,3 +212,37 @@ GLuint load_texture2D(std::string const &path) {
 
     return result;
 }
+
+static glm::vec3 cube_vertices[]
+        {
+                {0.f, 0.f, 0.f},
+                {1.f, 0.f, 0.f},
+                {0.f, 1.f, 0.f},
+                {1.f, 1.f, 0.f},
+                {0.f, 0.f, 1.f},
+                {1.f, 0.f, 1.f},
+                {0.f, 1.f, 1.f},
+                {1.f, 1.f, 1.f},
+        };
+
+static std::uint32_t cube_indices[]
+        {
+                // -Z
+                0, 2, 1,
+                1, 2, 3,
+                // +Z
+                4, 5, 6,
+                6, 5, 7,
+                // -Y
+                0, 1, 4,
+                4, 1, 5,
+                // +Y
+                2, 6, 3,
+                3, 6, 7,
+                // -X
+                0, 4, 2,
+                2, 4, 6,
+                // +X
+                1, 3, 5,
+                5, 3, 7,
+        };

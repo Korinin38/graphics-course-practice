@@ -12,10 +12,11 @@ layout (location = 3) in vec2 in_texcoord;
 out vec3 tangent;
 out vec3 normal;
 out vec2 texcoord;
+out vec3 position;
 
 void main()
 {
-    vec3 position = (model * vec4(in_position, 1.0)).xyz;
+    position = (model * vec4(in_position, 1.0)).xyz;
     gl_Position = projection * view * vec4(position, 1.0);
     tangent = mat3(model) * in_tangent;
     normal = mat3(model) * in_normal;

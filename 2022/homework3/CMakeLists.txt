@@ -24,7 +24,7 @@ set(TARGET_NAME "${PROJECT_NAME}")
 
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 
-add_executable(${TARGET_NAME} main.cpp gltf_loader.hpp gltf_loader.cpp stb_image.h stb_image.c graphic_object.h)
+add_executable(${TARGET_NAME} main.cpp gltf_loader.hpp gltf_loader.cpp stb_image.h stb_image.c graphic_object.h obj_parser.hpp obj_parser.cpp)
 target_include_directories(${TARGET_NAME} PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/rapidjson/include"
 	"${SDL2_INCLUDE_DIRS}"

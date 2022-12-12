@@ -12,6 +12,7 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <cmath>
 #include <map>
 
 #include "obj_parser.hpp"
@@ -44,7 +45,7 @@ out vec3 normal;
 
 void main()
 {
-    gl_Position = view * transform * vec4(in_position, 1.0);
+    gl_Position = view * transform * 0.01 * vec4(in_position, 1.0);
     normal = mat3(transform) * in_normal;
 }
 )";
@@ -153,7 +154,7 @@ int main() try
     GLuint transform_location = glGetUniformLocation(program, "transform");
 
     std::string project_root = PROJECT_ROOT;
-    obj_data bunny = parse_obj(project_root + "/bunny.obj");
+    obj_data bunny = parse_obj(project_root + "/17498_Octagonal_Lighthouse_v1_NEW.obj");
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -180,7 +181,7 @@ int main() try
 
     float near = 0.0001f;
     float far = 1000.f;
-    float fov = std::numbers::pi / 4;
+    float fov = M_PI_4;
     float aspect_ratio = 1.0f * width / height;
     float right = near * tan(fov);
     float top = right / aspect_ratio;
