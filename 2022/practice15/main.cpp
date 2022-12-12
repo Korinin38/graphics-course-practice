@@ -78,8 +78,14 @@ void main()
 {
     float sdf_value = sdf_scale * (median(texture(sdf_texture, texcoord).rgb) - 0.5);
 
-    float alpha = smoothstep(-0.5, 0.5, sdf_value);
-    out_color = vec4(vec3(0.0), alpha);
+    float high = length(vec2(dFdx(sdf_value), dFdy(sdf_value)))/sqrt(2.0);
+
+    vec3 col = vec3(0.0);
+    if (sdf_value < 1)
+        col += (1 - sdf_value);
+
+    float alpha = smoothstep(-0.5, high, sdf_value);
+    out_color = vec4(col, alpha);
 //    out_color = vec4(vec3(0.0), sdf_value);
 //    out_color = vec4(texcoord, 0.0, 1.0);
 }
@@ -224,6 +230,7 @@ int main() try {
 
     int vert_count = 0;
     std::string text = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+//    std::string text = "Hell world!";
     bool text_changed = true;
 
     bool running = true;
@@ -311,6 +318,7 @@ int main() try {
         glm::mat4 transform(1.f);
 //        transform = glm::translate(transform, glm::vec3({-1.f, 1.f, 0.f}));
         transform = glm::scale(transform, glm::vec3({2.f / width, -2.f / height, 0.f}));
+        transform = glm::scale(transform, glm::vec3(3.f));
         transform = glm::translate(transform, bound_box);
 
         glUseProgram(msdf_program);
